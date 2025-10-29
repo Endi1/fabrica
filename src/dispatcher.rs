@@ -5,7 +5,10 @@ use gemini_rust::{
     GenerationResponse, Message, Role, Tool,
 };
 
-use crate::tools::{get_current_path, get_directory_contents, CurrentPathResult, DirectoryContents, DirectoryPath};
+use crate::tools::{
+    CurrentPathResult, DirectoryContents, DirectoryPath, ReadFileContents, ReadFileContentsResult,
+    get_current_path, get_directory_contents, read_file_contents,
+};
 
 pub struct Conversation {
     pub contents: Vec<Message>,
@@ -15,8 +18,25 @@ pub fn get_tools() -> Tool {
     let get_current_path_tool =
         FunctionDeclaration::new("get_current_path", "Get the current directory path", None)
             .with_response::<CurrentPathResult>();
-    let get_directory_contents_tool = FunctionDeclaration::new("get_directory_contents", "Get all the file and folder names for the current directory", None).with_parameters::<DirectoryPath>().with_response::<DirectoryContents>();
-    return Tool::with_functions(vec![get_current_path_tool, get_directory_contents_tool]);
+    let get_directory_contents_tool = FunctionDeclaration::new(
+        "get_directory_contents",
+        "Get all the file and folder names for the current directory",
+        None,
+    )
+    .with_parameters::<DirectoryPath>()
+    .with_response::<DirectoryContents>();
+    let read_file_contents_tool = FunctionDeclaration::new(
+        "read_file_contents",
+        "Reads the file contents for a given file found inside a given path",
+        None,
+    )
+    .with_parameters::<ReadFileContents>()
+    .with_response::<ReadFileContentsResult>();
+    return Tool::with_functions(vec![
+        get_current_path_tool,
+        get_directory_contents_tool,
+        read_file_contents_tool,
+    ]);
 }
 
 // TODO Rename this
@@ -67,11 +87,30 @@ pub fn dispatch(
         "get_directory_contents" => {
             let model_message = Message::model(serde_json::to_string(function_call).unwrap());
             conversation.contents.push(model_message);
-            let directory_path: DirectoryPath = serde_json::from_value(function_call.args.clone()).unwrap();
+            let directory_path: DirectoryPath =
+                serde_json::from_value(function_call.args.clone()).unwrap();
             let tool_response = get_directory_contents(directory_path).unwrap();
-            conversation.contents.push(Message::function("get_directory_contents", serde_json::to_value(tool_response).unwrap()));
+            conversation.contents.push(Message::function(
+                "get_directory_contents",
+                serde_json::to_value(tool_response).unwrap(),
+            ));
             return Ok(conversation);
-        },
+        }
+        "read_file_contents" => {
+            let model_message = Message::model(serde_json::to_string(function_call).unwrap());
+            conversation.contents.push(model_message);
+
+            let read_file_location: ReadFileContents =
+                serde_json::from_value(function_call.args.clone()).unwrap();
+            let tool_reponse = read_file_contents(read_file_location).unwrap();
+            println!("{}", serde_json::to_value(&tool_reponse).unwrap());
+            conversation.contents.push(Message::function(
+                "read_file_contents",
+                serde_json::to_value(tool_reponse).unwrap(),
+            ));
+
+            Ok(conversation)
+        }
         _ => Err("unknown function name".to_string()), // TODO figure out how to handle this
     }
 }

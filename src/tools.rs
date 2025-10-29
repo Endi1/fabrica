@@ -22,6 +22,17 @@ pub struct DirectoryPath {
     path: String,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct ReadFileContents {
+    directory: String,
+    filename: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct ReadFileContentsResult {
+    file_contents: String,
+}
+
 pub fn get_directory_contents(path: DirectoryPath) -> Result<DirectoryContentsResult> {
     let entries = fs::read_dir(path.path)?;
     let mut contents = Vec::new();
@@ -37,21 +48,35 @@ pub fn get_current_path() -> std::io::Result<CurrentPathResult> {
     let path = env::current_dir();
     let path_str = path.unwrap().to_str().unwrap().to_string();
     println!("{}", path_str);
-    Ok(CurrentPathResult {
-        path: path_str,
+    Ok(CurrentPathResult { path: path_str })
+}
+
+pub fn read_file_contents(args: ReadFileContents) -> Result<ReadFileContentsResult> {
+    let file_path = Path::new(&args.directory).join(&args.filename);
+    let contents = fs::read_to_string(file_path)?;
+
+    Ok(ReadFileContentsResult {
+        file_contents: contents,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs::{self, File}, path::PathBuf, str::FromStr};
+    use std::{
+        fs::{self, File},
+        path::PathBuf,
+        str::FromStr,
+    };
     use tempfile::TempDir;
 
     #[test]
     fn test_get_directory_contents_empty_dir() {
         let temp_dir = TempDir::new().unwrap();
-        let contents = get_directory_contents(DirectoryPath {path: temp_dir.path().to_str().unwrap().to_string()}).unwrap();
+        let contents = get_directory_contents(DirectoryPath {
+            path: temp_dir.path().to_str().unwrap().to_string(),
+        })
+        .unwrap();
         assert_eq!(contents.contents.len(), 0);
     }
 
@@ -64,7 +89,10 @@ mod tests {
         File::create(temp_path.join("file1.txt")).unwrap();
         File::create(temp_path.join("file2.rs")).unwrap();
 
-        let mut contents = get_directory_contents(DirectoryPath {path: temp_dir.path().to_str().unwrap().to_string()}).unwrap();
+        let mut contents = get_directory_contents(DirectoryPath {
+            path: temp_dir.path().to_str().unwrap().to_string(),
+        })
+        .unwrap();
         contents.contents.sort();
 
         assert_eq!(contents.contents.len(), 2);
@@ -81,7 +109,10 @@ mod tests {
         fs::create_dir(temp_path.join("subdir")).unwrap();
         File::create(temp_path.join("file.txt")).unwrap();
 
-        let mut contents = get_directory_contents(DirectoryPath {path: temp_dir.path().to_str().unwrap().to_string()}).unwrap();
+        let mut contents = get_directory_contents(DirectoryPath {
+            path: temp_dir.path().to_str().unwrap().to_string(),
+        })
+        .unwrap();
         contents.contents.sort();
 
         assert_eq!(contents.contents.len(), 2);
@@ -91,17 +122,24 @@ mod tests {
 
     #[test]
     fn test_get_directory_contents_nonexistent_path() {
-        let result = get_directory_contents(DirectoryPath {path: "/nonexistent/path".to_string()});
+        let result = get_directory_contents(DirectoryPath {
+            path: "/nonexistent/path".to_string(),
+        });
         assert!(result.is_err());
     }
 
     #[test]
     fn test_get_directory_contents_file_as_path() {
         let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.txt").to_str().unwrap().to_string();
+        let file_path = temp_dir
+            .path()
+            .join("test.txt")
+            .to_str()
+            .unwrap()
+            .to_string();
         File::create(&file_path).unwrap();
 
-        let result = get_directory_contents(DirectoryPath {path: file_path});
+        let result = get_directory_contents(DirectoryPath { path: file_path });
         assert!(result.is_err());
     }
 

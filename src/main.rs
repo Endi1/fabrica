@@ -41,17 +41,17 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Gemini::new(api_key)?;
 
     let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on";
-    let user_message = "What are the contents of the current directory?";
+    let user_message = Message::user("Find the directory where the Cargo.toml file is located. Only after you have found the location of the Cargo.toml file, read its contents and give me a summary of what's in there") ;
     let mut conversation = client.generate_content();
     conversation = conversation
         .with_system_prompt(system_prompt)
-        .with_user_message(user_message)
+        .with_message(user_message.clone())
         .with_tool(get_tools())
         .with_function_calling_mode(gemini_rust::FunctionCallingMode::Any);
     let response = conversation.execute().await?;
 
     println!("request sent");
 
-    not_a_dispatch(&response, Conversation { contents: vec![] }, client).await;
+    not_a_dispatch(&response, Conversation { contents: vec![user_message] }, client).await;
     Ok(())
 }
