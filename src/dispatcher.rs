@@ -5,7 +5,7 @@ use gemini_rust::{
     GenerationResponse, Message, Role, Tool,
 };
 
-use crate::tools::get_current_path;
+use crate::tools::{get_current_path, get_directory_contents, CurrentPathResult, DirectoryContents, DirectoryPath};
 
 pub struct Conversation {
     pub contents: Vec<Message>,
@@ -13,8 +13,10 @@ pub struct Conversation {
 
 pub fn get_tools() -> Tool {
     let get_current_path_tool =
-        FunctionDeclaration::new("get_current_path", "Get the current directory path", None);
-    return Tool::with_functions(vec![get_current_path_tool]);
+        FunctionDeclaration::new("get_current_path", "Get the current directory path", None)
+            .with_response::<CurrentPathResult>();
+    let get_directory_contents_tool = FunctionDeclaration::new("get_directory_contents", "Get all the file and folder names for the current directory", None).with_parameters::<DirectoryPath>().with_response::<DirectoryContents>();
+    return Tool::with_functions(vec![get_current_path_tool, get_directory_contents_tool]);
 }
 
 // TODO Rename this
@@ -28,6 +30,7 @@ pub fn not_a_dispatch(
         let function_call = function_calls.first();
         match function_call {
             Some(fc) => {
+                println!("tool called {}", fc.name);
                 let conversation = dispatch(fc, conversation);
                 match conversation {
                     Ok(convo) => {
@@ -53,7 +56,6 @@ pub fn dispatch(
     match function_call.name.as_str() {
         "get_current_path" => {
             let model_message = Message::model(serde_json::to_string(function_call).unwrap());
-            // let model_content = Content::function_call((*function_call).clone());
             conversation.contents.push(model_message);
             let tool_response = get_current_path().unwrap();
             conversation.contents.push(Message::function(
@@ -62,7 +64,14 @@ pub fn dispatch(
             ));
             return Ok(conversation);
         }
-        "get_directory_contents" => Err("Not implemented".to_string()),
+        "get_directory_contents" => {
+            let model_message = Message::model(serde_json::to_string(function_call).unwrap());
+            conversation.contents.push(model_message);
+            let directory_path: DirectoryPath = serde_json::from_value(function_call.args.clone()).unwrap();
+            let tool_response = get_directory_contents(directory_path).unwrap();
+            conversation.contents.push(Message::function("get_directory_contents", serde_json::to_value(tool_response).unwrap()));
+            return Ok(conversation);
+        },
         _ => Err("unknown function name".to_string()), // TODO figure out how to handle this
     }
 }

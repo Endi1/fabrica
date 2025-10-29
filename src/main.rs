@@ -40,9 +40,8 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a Gemini client with default settings (Gemini 2.5 Flash)
     let client = Gemini::new(api_key)?;
 
-
     let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on";
-    let user_message = "What is the current path?";
+    let user_message = "What are the contents of the current directory?";
     let mut conversation = client.generate_content();
     conversation = conversation
         .with_system_prompt(system_prompt)

@@ -1,32 +1,44 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io::Result, path::Path};
+use std::{env, fmt::Display, fs, io::Result, path::Path};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct DirectoryContents {
     path: String,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct CurrentPathResult {
     path: String,
 }
 
-pub fn get_directory_contents<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
-    let entries = fs::read_dir(path)?;
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct DirectoryContentsResult {
+    contents: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct DirectoryPath {
+    path: String,
+}
+
+pub fn get_directory_contents(path: DirectoryPath) -> Result<DirectoryContentsResult> {
+    let entries = fs::read_dir(path.path)?;
     let mut contents = Vec::new();
     for entry in entries {
         let entry = entry?;
         contents.push(entry.file_name().to_string_lossy().to_string());
     }
 
-    Ok(contents)
+    Ok(DirectoryContentsResult { contents: contents })
 }
 
 pub fn get_current_path() -> std::io::Result<CurrentPathResult> {
     let path = env::current_dir();
+    let path_str = path.unwrap().to_str().unwrap().to_string();
+    println!("{}", path_str);
     Ok(CurrentPathResult {
-        path: path.unwrap().to_str().unwrap().to_string(),
+        path: path_str,
     })
 }
 
@@ -39,8 +51,8 @@ mod tests {
     #[test]
     fn test_get_directory_contents_empty_dir() {
         let temp_dir = TempDir::new().unwrap();
-        let contents = get_directory_contents(temp_dir.path()).unwrap();
-        assert_eq!(contents.len(), 0);
+        let contents = get_directory_contents(DirectoryPath {path: temp_dir.path().to_str().unwrap().to_string()}).unwrap();
+        assert_eq!(contents.contents.len(), 0);
     }
 
     #[test]
@@ -52,12 +64,12 @@ mod tests {
         File::create(temp_path.join("file1.txt")).unwrap();
         File::create(temp_path.join("file2.rs")).unwrap();
 
-        let mut contents = get_directory_contents(temp_path).unwrap();
-        contents.sort();
+        let mut contents = get_directory_contents(DirectoryPath {path: temp_dir.path().to_str().unwrap().to_string()}).unwrap();
+        contents.contents.sort();
 
-        assert_eq!(contents.len(), 2);
-        assert!(contents.contains(&"file1.txt".to_string()));
-        assert!(contents.contains(&"file2.rs".to_string()));
+        assert_eq!(contents.contents.len(), 2);
+        assert!(contents.contents.contains(&"file1.txt".to_string()));
+        assert!(contents.contents.contains(&"file2.rs".to_string()));
     }
 
     #[test]
