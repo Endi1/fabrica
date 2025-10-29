@@ -40,25 +40,25 @@ pub fn get_tools() -> Tool {
 }
 
 // TODO Rename this
-pub fn not_a_dispatch(
-    response: &GenerationResponse,
-    conversation: Conversation,
+pub fn not_a_dispatch<'a>(
+    response: &'a GenerationResponse,
+    conversation: &'a mut Conversation,
     client: Gemini,
-) -> Pin<Box<dyn Future<Output = ()> + '_>> {
-    Box::pin(async move {
+) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
+    Box::pin(async {
         let function_calls = response.function_calls();
         let function_call = function_calls.first();
         match function_call {
             Some(fc) => {
                 println!("tool called {}", fc.name);
-                let conversation = dispatch(fc, conversation);
-                match conversation {
-                    Ok(convo) => {
-                        let content_builder = conversation_to_content_builder(&client, &convo);
+                let dispatch_result = dispatch(fc, conversation);
+                match dispatch_result {
+                    Ok(_) => {
+                        let content_builder = conversation_to_content_builder(&client, conversation);
                         let response = content_builder.with_tool(get_tools()).execute().await;
                         match response {
                             Err(err) => println!("{}", err),
-                            Ok(res) => not_a_dispatch(&res, convo, client).await,
+                            Ok(res) => not_a_dispatch(&res, conversation, client).await,
                         }
                     }
                     Err(err) => println!("{}", err),
@@ -71,8 +71,8 @@ pub fn not_a_dispatch(
 
 pub fn dispatch(
     function_call: &&FunctionCall,
-    mut conversation: Conversation,
-) -> Result<Conversation, String> {
+    conversation: &mut Conversation,
+) -> Result<(), String> {
     match function_call.name.as_str() {
         "get_current_path" => {
             let model_message = Message::model(serde_json::to_string(function_call).unwrap());
@@ -82,7 +82,7 @@ pub fn dispatch(
                 "get_current_path",
                 serde_json::to_value(tool_response).unwrap(),
             ));
-            return Ok(conversation);
+            return Ok(());
         }
         "get_directory_contents" => {
             let model_message = Message::model(serde_json::to_string(function_call).unwrap());
@@ -94,7 +94,7 @@ pub fn dispatch(
                 "get_directory_contents",
                 serde_json::to_value(tool_response).unwrap(),
             ));
-            return Ok(conversation);
+            return Ok(());
         }
         "read_file_contents" => {
             let model_message = Message::model(serde_json::to_string(function_call).unwrap());
@@ -109,7 +109,7 @@ pub fn dispatch(
                 serde_json::to_value(tool_reponse).unwrap(),
             ));
 
-            Ok(conversation)
+            Ok(())
         }
         _ => Err("unknown function name".to_string()), // TODO figure out how to handle this
     }

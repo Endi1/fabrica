@@ -1,7 +1,8 @@
 use gemini_rust::{Content, FunctionDeclaration, Gemini, Message, Role, Tool};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::env;
+use std::io::Write;
+use std::{env, io};
 use std::process::ExitCode;
 
 use crate::dispatcher::{Conversation, get_tools, not_a_dispatch};
@@ -19,6 +20,16 @@ async fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn get_input() -> String {
+    print!("> ");
+    io::stdout().flush().unwrap();
+    
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+
+    return input;
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -39,19 +50,35 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a Gemini client with default settings (Gemini 2.5 Flash)
     let client = Gemini::new(api_key)?;
+    conversation_loop(client).await?;
 
-    let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on";
-    let user_message = Message::user("Find the directory where the Cargo.toml file is located. Only after you have found the location of the Cargo.toml file, read its contents and give me a summary of what's in there") ;
-    let mut conversation = client.generate_content();
-    conversation = conversation
-        .with_system_prompt(system_prompt)
-        .with_message(user_message.clone())
-        .with_tool(get_tools())
-        .with_function_calling_mode(gemini_rust::FunctionCallingMode::Any);
-    let response = conversation.execute().await?;
-
-    println!("request sent");
-
-    not_a_dispatch(&response, Conversation { contents: vec![user_message] }, client).await;
     Ok(())
+}
+
+async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn std::error::Error>> {
+    let mut state = Conversation {contents: vec![]};
+    loop {
+        let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on";
+        let user_message_content = get_input();
+
+        if user_message_content == "/exit\n".to_string() {
+            break;
+        }
+
+        let user_message = Message::user(user_message_content) ;
+        let mut conversation = client.generate_content();
+        conversation = conversation
+            .with_system_prompt(system_prompt)
+            .with_message(user_message.clone())
+            .with_tool(get_tools())
+            .with_function_calling_mode(gemini_rust::FunctionCallingMode::Any);
+        let response = conversation.execute().await?;
+
+        println!("request sent");
+
+        state.contents.push(user_message.clone());
+        not_a_dispatch(&response, &mut state, client.clone()).await;
+        // return Ok(());
+    }
+    return Ok(());
 }
