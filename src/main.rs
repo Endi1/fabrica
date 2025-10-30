@@ -1,4 +1,5 @@
 use gemini_rust::{Gemini, Message};
+use std::error::Error;
 use std::io::Write;
 use std::process::ExitCode;
 use std::{env, io};
@@ -20,14 +21,14 @@ async fn main() -> ExitCode {
     }
 }
 
-fn get_input() -> String {
+fn get_input() -> Result<String, Box<dyn Error>> {
     print!("> ");
-    io::stdout().flush().unwrap();
+    io::stdout().flush()?;
 
     let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
+    io::stdin().read_line(&mut input)?;
 
-    input
+    Ok(input)
 }
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,11 +42,11 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn std::error::Error>> {
+async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn Error>> {
     let mut state = Conversation { contents: vec![] };
     loop {
         let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on";
-        let user_message_content = get_input();
+        let user_message_content = get_input()?;
 
         if user_message_content == "/exit\n" {
             break;
