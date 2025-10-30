@@ -38,6 +38,7 @@ pub fn get_tools() -> Tool {
     let get_current_path_tool =
         FunctionDeclaration::new("get_current_path", "Get the current directory path", None)
             .with_response::<CurrentPathResult>();
+
     let get_directory_contents_tool = FunctionDeclaration::new(
         "get_directory_contents",
         "Get all the file and folder names for the current directory",
@@ -45,6 +46,7 @@ pub fn get_tools() -> Tool {
     )
     .with_parameters::<DirectoryPath>()
     .with_response::<DirectoryContents>();
+
     let read_file_contents_tool = FunctionDeclaration::new(
         "read_file_contents",
         "Reads the file contents for a given file found inside a given path",
@@ -52,6 +54,7 @@ pub fn get_tools() -> Tool {
     )
     .with_parameters::<ReadFileContents>()
     .with_response::<ReadFileContentsResult>();
+
     Tool::with_functions(vec![
         get_current_path_tool,
         get_directory_contents_tool,
