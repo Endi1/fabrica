@@ -1,6 +1,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io::Result, path::Path};
+use std::{
+    env, fs,
+    io::{Error, Result},
+    path::Path,
+};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct DirectoryContents {
@@ -46,8 +50,10 @@ pub fn get_directory_contents(path: DirectoryPath) -> Result<DirectoryContentsRe
 
 pub fn get_current_path() -> std::io::Result<CurrentPathResult> {
     let path = env::current_dir();
-    let path_str = path.unwrap().to_str().unwrap().to_string();
-    println!("{}", path_str);
+    let path_str = path?
+        .to_str()
+        .ok_or(Error::new(std::io::ErrorKind::NotFound, "Path not found"))?
+        .to_string();
     Ok(CurrentPathResult { path: path_str })
 }
 
