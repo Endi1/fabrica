@@ -1,8 +1,7 @@
-use std::{pin::Pin, ptr::copy_nonoverlapping, time::Duration};
+use std::pin::Pin;
 
 use gemini_rust::{
-    CacheBuilder, Content, ContentBuilder, FunctionCall, FunctionDeclaration, Gemini,
-    GenerationResponse, Message, Role, Tool,
+    ContentBuilder, FunctionCall, FunctionDeclaration, Gemini, GenerationResponse, Message, Tool,
 };
 
 use crate::tools::{
@@ -32,11 +31,11 @@ pub fn get_tools() -> Tool {
     )
     .with_parameters::<ReadFileContents>()
     .with_response::<ReadFileContentsResult>();
-    return Tool::with_functions(vec![
+    Tool::with_functions(vec![
         get_current_path_tool,
         get_directory_contents_tool,
         read_file_contents_tool,
-    ]);
+    ])
 }
 
 // TODO Rename this
@@ -54,7 +53,8 @@ pub fn not_a_dispatch<'a>(
                 let dispatch_result = dispatch(fc, conversation);
                 match dispatch_result {
                     Ok(_) => {
-                        let content_builder = conversation_to_content_builder(&client, conversation);
+                        let content_builder =
+                            conversation_to_content_builder(&client, conversation);
                         let response = content_builder.with_tool(get_tools()).execute().await;
                         match response {
                             Err(err) => println!("{}", err),
@@ -82,7 +82,7 @@ pub fn dispatch(
                 "get_current_path",
                 serde_json::to_value(tool_response).unwrap(),
             ));
-            return Ok(());
+            Ok(())
         }
         "get_directory_contents" => {
             let model_message = Message::model(serde_json::to_string(function_call).unwrap());
@@ -94,7 +94,7 @@ pub fn dispatch(
                 "get_directory_contents",
                 serde_json::to_value(tool_response).unwrap(),
             ));
-            return Ok(());
+            Ok(())
         }
         "read_file_contents" => {
             let model_message = Message::model(serde_json::to_string(function_call).unwrap());
@@ -122,5 +122,5 @@ fn conversation_to_content_builder(client: &Gemini, conversation: &Conversation)
         content_builder = content_builder.with_message(content.clone())
     }
 
-    return content_builder;
+    content_builder
 }

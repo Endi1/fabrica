@@ -1,9 +1,7 @@
-use gemini_rust::{Content, FunctionDeclaration, Gemini, Message, Role, Tool};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use gemini_rust::{Gemini, Message};
 use std::io::Write;
-use std::{env, io};
 use std::process::ExitCode;
+use std::{env, io};
 
 use crate::dispatcher::{Conversation, get_tools, not_a_dispatch};
 
@@ -25,23 +23,11 @@ async fn main() -> ExitCode {
 fn get_input() -> String {
     print!("> ");
     io::stdout().flush().unwrap();
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
 
-    return input;
-}
-
-#[derive(Serialize, Deserialize, JsonSchema)]
-struct Weather {
-    location: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-struct WeatherResponse {
-    temperature: i32,
-    unit: String,
-    condition: String,
+    input
 }
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,16 +42,16 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn std::error::Error>> {
-    let mut state = Conversation {contents: vec![]};
+    let mut state = Conversation { contents: vec![] };
     loop {
         let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on";
         let user_message_content = get_input();
 
-        if user_message_content == "/exit\n".to_string() {
+        if user_message_content == "/exit\n" {
             break;
         }
 
-        let user_message = Message::user(user_message_content) ;
+        let user_message = Message::user(user_message_content);
         let mut conversation = client.generate_content();
         conversation = conversation
             .with_system_prompt(system_prompt)
@@ -80,5 +66,5 @@ async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn std::error::Err
         not_a_dispatch(&response, &mut state, client.clone()).await;
         // return Ok(());
     }
-    return Ok(());
+    Ok(())
 }

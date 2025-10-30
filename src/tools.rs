@@ -1,6 +1,6 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{env, fmt::Display, fs, io::Result, path::Path};
+use std::{env, fs, io::Result, path::Path};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct DirectoryContents {
@@ -41,7 +41,7 @@ pub fn get_directory_contents(path: DirectoryPath) -> Result<DirectoryContentsRe
         contents.push(entry.file_name().to_string_lossy().to_string());
     }
 
-    Ok(DirectoryContentsResult { contents: contents })
+    Ok(DirectoryContentsResult { contents })
 }
 
 pub fn get_current_path() -> std::io::Result<CurrentPathResult> {
