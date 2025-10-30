@@ -1,4 +1,5 @@
-use gemini_rust::{Gemini, Message};
+use gemini_rust::Gemini;
+use gemini_rust::Message;
 use std::error::Error;
 use std::io::Write;
 use std::process::ExitCode;
