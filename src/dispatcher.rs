@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{error::Error, pin::Pin};
 
 use gemini_rust::{
     ContentBuilder, FunctionCall, FunctionDeclaration, Gemini, GenerationResponse, Message, Tool,
@@ -11,6 +11,27 @@ use crate::tools::{
 
 pub struct Conversation {
     pub contents: Vec<Message>,
+}
+
+impl Conversation {
+    fn add_function_call_message(
+        &mut self,
+        function_call: &&FunctionCall,
+    ) -> Result<(), Box<dyn Error>> {
+        let parsed_function_call = serde_json::to_string(function_call)?;
+        self.contents.push(Message::model(parsed_function_call));
+        Ok(())
+    }
+
+    fn add_function_call_result<T: serde::Serialize>(
+        &mut self,
+        name: String,
+        value: T,
+    ) -> Result<(), Box<dyn Error>> {
+        let parsed_value = serde_json::to_value(value)?;
+        self.contents.push(Message::function(name, parsed_value));
+        Ok(())
+    }
 }
 
 pub fn get_tools() -> Tool {
@@ -38,8 +59,7 @@ pub fn get_tools() -> Tool {
     ])
 }
 
-// TODO Rename this
-pub fn not_a_dispatch<'a>(
+pub fn run_agent<'a>(
     response: &'a GenerationResponse,
     conversation: &'a mut Conversation,
     client: Gemini,
@@ -58,7 +78,7 @@ pub fn not_a_dispatch<'a>(
                         let response = content_builder.with_tool(get_tools()).execute().await;
                         match response {
                             Err(err) => println!("{}", err),
-                            Ok(res) => not_a_dispatch(&res, conversation, client).await,
+                            Ok(res) => run_agent(&res, conversation, client).await,
                         }
                     }
                     Err(err) => println!("{}", err),
@@ -72,46 +92,28 @@ pub fn not_a_dispatch<'a>(
 pub fn dispatch(
     function_call: &&FunctionCall,
     conversation: &mut Conversation,
-) -> Result<(), String> {
+) -> Result<(), Box<dyn Error>> {
     match function_call.name.as_str() {
         "get_current_path" => {
-            let model_message = Message::model(serde_json::to_string(function_call).unwrap());
-            conversation.contents.push(model_message);
-            let tool_response = get_current_path().unwrap();
-            conversation.contents.push(Message::function(
-                "get_current_path",
-                serde_json::to_value(tool_response).unwrap(),
-            ));
-            Ok(())
+            conversation.add_function_call_message(function_call)?;
+            let tool_response = get_current_path()?;
+            conversation.add_function_call_result("get_current_path".to_string(), tool_response)
         }
         "get_directory_contents" => {
-            let model_message = Message::model(serde_json::to_string(function_call).unwrap());
-            conversation.contents.push(model_message);
-            let directory_path: DirectoryPath =
-                serde_json::from_value(function_call.args.clone()).unwrap();
-            let tool_response = get_directory_contents(directory_path).unwrap();
-            conversation.contents.push(Message::function(
-                "get_directory_contents",
-                serde_json::to_value(tool_response).unwrap(),
-            ));
-            Ok(())
+            conversation.add_function_call_message(function_call)?;
+            let directory_path: DirectoryPath = serde_json::from_value(function_call.args.clone())?;
+            let tool_response = get_directory_contents(directory_path)?;
+            conversation
+                .add_function_call_result("get_directory_contents".to_string(), tool_response)
         }
         "read_file_contents" => {
-            let model_message = Message::model(serde_json::to_string(function_call).unwrap());
-            conversation.contents.push(model_message);
-
+            conversation.add_function_call_message(function_call)?;
             let read_file_location: ReadFileContents =
-                serde_json::from_value(function_call.args.clone()).unwrap();
-            let tool_reponse = read_file_contents(read_file_location).unwrap();
-            println!("{}", serde_json::to_value(&tool_reponse).unwrap());
-            conversation.contents.push(Message::function(
-                "read_file_contents",
-                serde_json::to_value(tool_reponse).unwrap(),
-            ));
-
-            Ok(())
+                serde_json::from_value(function_call.args.clone())?;
+            let tool_reponse = read_file_contents(read_file_location)?;
+            conversation.add_function_call_result("read_file_contents".to_string(), tool_reponse)
         }
-        _ => Err("unknown function name".to_string()), // TODO figure out how to handle this
+        _ => Err(Box::<dyn Error>::from("Unsupported")), // TODO figure out how to handle this
     }
 }
 

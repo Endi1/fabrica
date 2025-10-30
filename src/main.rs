@@ -3,7 +3,7 @@ use std::io::Write;
 use std::process::ExitCode;
 use std::{env, io};
 
-use crate::dispatcher::{Conversation, get_tools, not_a_dispatch};
+use crate::dispatcher::{Conversation, get_tools, run_agent};
 
 mod dispatcher;
 mod tools;
@@ -63,7 +63,7 @@ async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn std::error::Err
         println!("request sent");
 
         state.contents.push(user_message.clone());
-        not_a_dispatch(&response, &mut state, client.clone()).await;
+        run_agent(&response, &mut state, client.clone()).await;
         // return Ok(());
     }
     Ok(())
