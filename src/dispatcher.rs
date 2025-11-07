@@ -1,12 +1,10 @@
 use std::{error::Error, pin::Pin};
 
-use gemini_rust::{
-    ContentBuilder, FunctionCall, FunctionDeclaration, Gemini, GenerationResponse, Message, Tool,
-};
+use gemini_rust::{ContentBuilder, FunctionCall, Gemini, GenerationResponse, Message};
 
 use crate::tools::{
-    CurrentPathResult, DirectoryContents, DirectoryPath, ReadFileContents, ReadFileContentsResult,
-    get_current_path, get_directory_contents, read_file_contents,
+    DirectoryPath, ReadFileContents, filesystem, get_current_path, get_directory_contents,
+    read_file_contents,
 };
 
 pub struct Conversation {
@@ -34,34 +32,6 @@ impl Conversation {
     }
 }
 
-pub fn get_tools() -> Tool {
-    let get_current_path_tool =
-        FunctionDeclaration::new("get_current_path", "Get the current directory path", None)
-            .with_response::<CurrentPathResult>();
-
-    let get_directory_contents_tool = FunctionDeclaration::new(
-        "get_directory_contents",
-        "Get all the file and folder names for the current directory",
-        None,
-    )
-    .with_parameters::<DirectoryPath>()
-    .with_response::<DirectoryContents>();
-
-    let read_file_contents_tool = FunctionDeclaration::new(
-        "read_file_contents",
-        "Reads the file contents for a given file found inside a given path",
-        None,
-    )
-    .with_parameters::<ReadFileContents>()
-    .with_response::<ReadFileContentsResult>();
-
-    Tool::with_functions(vec![
-        get_current_path_tool,
-        get_directory_contents_tool,
-        read_file_contents_tool,
-    ])
-}
-
 pub fn run_agent<'a>(
     response: &'a GenerationResponse,
     conversation: &'a mut Conversation,
@@ -78,7 +48,12 @@ pub fn run_agent<'a>(
                     Ok(_) => {
                         let content_builder =
                             conversation_to_content_builder(&client, conversation);
-                        let response = content_builder.with_tool(get_tools()).execute().await;
+
+                        let response = content_builder
+                            .with_tool(filesystem::get_tools())
+                            .with_function_calling_mode(gemini_rust::FunctionCallingMode::Auto)
+                            .execute()
+                            .await;
                         match response {
                             Err(err) => println!("{}", err),
                             Ok(res) => run_agent(&res, conversation, client).await,
@@ -99,13 +74,15 @@ pub fn dispatch(
     match function_call.name.as_str() {
         "get_current_path" => {
             conversation.add_function_call_message(function_call)?;
-            let tool_response = get_current_path()?;
+            let tool = get_current_path();
+            let tool_response = tool.run(())?;
             conversation.add_function_call_result("get_current_path".to_string(), tool_response)
         }
         "get_directory_contents" => {
             conversation.add_function_call_message(function_call)?;
             let directory_path: DirectoryPath = serde_json::from_value(function_call.args.clone())?;
-            let tool_response = get_directory_contents(directory_path)?;
+            let tool = get_directory_contents();
+            let tool_response = tool.run(directory_path)?;
             conversation
                 .add_function_call_result("get_directory_contents".to_string(), tool_response)
         }
@@ -113,7 +90,8 @@ pub fn dispatch(
             conversation.add_function_call_message(function_call)?;
             let read_file_location: ReadFileContents =
                 serde_json::from_value(function_call.args.clone())?;
-            let tool_reponse = read_file_contents(read_file_location)?;
+            let tool = read_file_contents();
+            let tool_reponse = tool.run(read_file_location)?;
             conversation.add_function_call_result("read_file_contents".to_string(), tool_reponse)
         }
         _ => Err(Box::<dyn Error>::from("Unsupported")), // TODO figure out how to handle this

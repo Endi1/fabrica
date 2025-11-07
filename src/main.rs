@@ -5,7 +5,8 @@ use std::io::Write;
 use std::process::ExitCode;
 use std::{env, io};
 
-use crate::dispatcher::{Conversation, get_tools, run_agent};
+use crate::dispatcher::{Conversation, run_agent};
+use crate::tools::filesystem;
 
 mod dispatcher;
 mod tools;
@@ -58,8 +59,8 @@ async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn Error>> {
         conversation = conversation
             .with_system_prompt(system_prompt)
             .with_message(user_message.clone())
-            .with_tool(get_tools())
-            .with_function_calling_mode(gemini_rust::FunctionCallingMode::Any);
+            .with_tool(filesystem::get_tools())
+            .with_function_calling_mode(gemini_rust::FunctionCallingMode::Auto);
         let response = conversation.execute().await?;
 
         println!("request sent");
