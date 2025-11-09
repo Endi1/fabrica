@@ -98,7 +98,10 @@ pub fn dispatch(
     }
 }
 
-fn conversation_to_content_builder(client: &Gemini, conversation: &Conversation) -> ContentBuilder {
+pub fn conversation_to_content_builder(
+    client: &Gemini,
+    conversation: &Conversation,
+) -> ContentBuilder {
     let mut content_builder = client.generate_content();
 
     for content in &conversation.contents {

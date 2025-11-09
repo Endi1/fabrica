@@ -5,6 +5,7 @@ use std::io::Write;
 use std::process::ExitCode;
 use std::{env, io};
 
+use crate::dispatcher::conversation_to_content_builder;
 use crate::dispatcher::{Conversation, run_agent};
 use crate::tools::filesystem;
 
@@ -54,8 +55,12 @@ async fn conversation_loop(client: Gemini) -> Result<(), Box<dyn Error>> {
             break;
         }
 
+        // if user_message_content == "/history\n" {
+        //     println!("{}", state.contents);
+        // }
+
         let user_message = Message::user(user_message_content);
-        let mut conversation = client.generate_content();
+        let mut conversation = conversation_to_content_builder(&client, &state);
         conversation = conversation
             .with_system_prompt(system_prompt)
             .with_message(user_message.clone())
