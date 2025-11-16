@@ -76,14 +76,11 @@ impl<
         function_declaration
     }
     fn execute(&self, args: Value) -> Result<Value, Box<dyn Error>> {
-        // Deserialize JSON args to the concrete type A
         let typed_args: A =
             serde_json::from_value(args).map_err(|e| Box::new(e) as Box<dyn Error>)?;
 
-        // Call the tool's run function
         let result: R = self.run(typed_args)?;
 
-        // Serialize the result back to JSON
         let json_result =
             serde_json::to_value(result).map_err(|e| Box::new(e) as Box<dyn Error>)?;
 

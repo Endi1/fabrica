@@ -87,34 +87,34 @@ fn test_get_directory_contents_file_as_path() {
 
 #[test]
 fn test_get_current_path_returns_ok() {
-    let result = get_current_path().run(());
+    let result = get_current_path().run(serde_json::json!({}));
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_get_current_path_is_absolute() {
-    let path = get_current_path().run(()).unwrap();
+    let path = get_current_path().run(serde_json::json!({})).unwrap();
     let parsed_path = PathBuf::from_str(&path.path).unwrap();
     assert!(parsed_path.is_absolute());
 }
 
 #[test]
 fn test_get_current_path_matches_env_current_dir() {
-    let our_path = get_current_path().run(()).unwrap().path;
+    let our_path = get_current_path().run(serde_json::json!({})).unwrap().path;
     let env_path = env::current_dir().unwrap().to_str().unwrap().to_string();
     assert_eq!(our_path, env_path);
 }
 
 #[test]
 fn test_get_current_path_exists() {
-    let path = get_current_path().run(()).unwrap();
+    let path = get_current_path().run(serde_json::json!({})).unwrap();
     let parsed_path = PathBuf::from_str(&path.path).unwrap();
     assert!(parsed_path.exists());
 }
 
 #[test]
 fn test_get_current_path_is_directory() {
-    let path = get_current_path().run(()).unwrap();
+    let path = get_current_path().run(serde_json::json!({})).unwrap();
     let parsed_path = PathBuf::from_str(&path.path).unwrap();
     assert!(parsed_path.is_dir());
 }
@@ -129,10 +129,13 @@ fn test_read_file_contents_success() {
     writeln!(file, "Hello, World!").unwrap();
     writeln!(file, "This is a test file.").unwrap();
 
+    let mut fp = temp_path.to_str().unwrap().to_string();
+    fp.push_str("/test.txt");
     let result = read()
         .run(ReadInput {
-            directory: temp_path.to_str().unwrap().to_string(),
-            filename: "test.txt".to_string(),
+            filepath: fp,
+            offset: None,
+            limit: None,
         })
         .unwrap();
 
@@ -150,10 +153,13 @@ fn test_read_file_contents_empty_file() {
     // Create empty file
     File::create(temp_path.join("empty.txt")).unwrap();
 
+    let mut fp = temp_path.to_str().unwrap().to_string();
+    fp.push_str("/empty.txt");
     let result = read()
         .run(ReadInput {
-            directory: temp_path.to_str().unwrap().to_string(),
-            filename: "empty.txt".to_string(),
+            filepath: fp,
+            offset: None,
+            limit: None,
         })
         .unwrap();
 
@@ -164,9 +170,12 @@ fn test_read_file_contents_empty_file() {
 fn test_read_file_contents_nonexistent_file() {
     let temp_dir = TempDir::new().unwrap();
 
+    let mut fp = temp_dir.path().to_str().unwrap().to_string();
+    fp.push_str("/nonexistent.txt");
     let result = read().run(ReadInput {
-        directory: temp_dir.path().to_str().unwrap().to_string(),
-        filename: "nonexistent.txt".to_string(),
+        filepath: fp,
+        offset: None,
+        limit: None,
     });
 
     assert!(result.is_err());
@@ -175,8 +184,9 @@ fn test_read_file_contents_nonexistent_file() {
 #[test]
 fn test_read_file_contents_nonexistent_directory() {
     let result = read().run(ReadInput {
-        directory: "/nonexistent/directory".to_string(),
-        filename: "test.txt".to_string(),
+        filepath: "/nonexistent/directory/test.txt".to_string(),
+        offset: None,
+        limit: None,
     });
 
     assert!(result.is_err());
@@ -194,10 +204,13 @@ fn test_read_file_contents_with_subdirectory() {
     let mut file = File::create(subdir.join("nested.txt")).unwrap();
     writeln!(file, "Nested file content").unwrap();
 
+    let mut fp = subdir.to_str().unwrap().to_string();
+    fp.push_str("/nested.txt");
     let result = read()
         .run(ReadInput {
-            directory: subdir.to_str().unwrap().to_string(),
-            filename: "nested.txt".to_string(),
+            filepath: fp,
+            offset: None,
+            limit: None,
         })
         .unwrap();
 
@@ -213,10 +226,13 @@ fn test_read_file_contents_unicode() {
     let mut file = File::create(temp_path.join("unicode.txt")).unwrap();
     writeln!(file, "Hello 世界! 🦀").unwrap();
 
+    let mut fp = temp_path.to_str().unwrap().to_string();
+    fp.push_str("/unicode.txt");
     let result = read()
         .run(ReadInput {
-            directory: temp_path.to_str().unwrap().to_string(),
-            filename: "unicode.txt".to_string(),
+            filepath: fp,
+            offset: None,
+            limit: None,
         })
         .unwrap();
 
@@ -232,9 +248,12 @@ fn test_read_file_contents_binary_file() {
     let binary_data = vec![0u8, 1u8, 2u8, 255u8];
     fs::write(temp_path.join("binary.bin"), &binary_data).unwrap();
 
+    let mut fp = temp_path.to_str().unwrap().to_string();
+    fp.push_str("/binary.bin");
     let result = read().run(ReadInput {
-        directory: temp_path.to_str().unwrap().to_string(),
-        filename: "binary.bin".to_string(),
+        filepath: fp,
+        offset: None,
+        limit: None,
     });
 
     // This might fail or succeed depending on if binary data is valid UTF-8
@@ -255,9 +274,12 @@ fn test_read_file_contents_directory_as_filename() {
     // Create subdirectory
     fs::create_dir(temp_path.join("subdir")).unwrap();
 
+    let mut fp = temp_path.to_str().unwrap().to_string();
+    fp.push_str("/subdir");
     let result = read().run(ReadInput {
-        directory: temp_path.to_str().unwrap().to_string(),
-        filename: "subdir".to_string(),
+        filepath: fp,
+        offset: None,
+        limit: None,
     });
 
     assert!(result.is_err());
@@ -273,9 +295,12 @@ fn test_read_file_contents_path_traversal() {
     writeln!(file, "Secret content").unwrap();
 
     // Try to read using path traversal (this should still work as Path::join handles it)
+    let mut fp = temp_path.to_str().unwrap().to_string();
+    fp.push_str("/../secret.txt");
     let result = read().run(ReadInput {
-        directory: temp_path.to_str().unwrap().to_string(),
-        filename: "../secret.txt".to_string(),
+        filepath: fp,
+        offset: None,
+        limit: None,
     });
 
     // This test verifies the behavior - it may succeed or fail depending on filesystem

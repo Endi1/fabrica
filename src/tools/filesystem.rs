@@ -1,6 +1,7 @@
 use std::{env, fs, io::Error, path::Path};
 
 use gemini_rust::{FunctionDeclaration, Tool};
+use serde_json::Value;
 
 use crate::tools::{
     CurrentPathResult, DirectoryContentsResult, DirectoryPath, ExecutableTool, MyTool, ReadInput,
@@ -42,8 +43,8 @@ pub fn ls() -> MyTool<'static, DirectoryPath, DirectoryContentsResult> {
     })
 }
 
-pub fn get_current_path() -> MyTool<'static, (), CurrentPathResult> {
-    MyTool::new("get_current_path", "Get the current directory path").with_execution(|()| {
+pub fn get_current_path() -> MyTool<'static, Value, CurrentPathResult> {
+    MyTool::new("get_current_path", "Get the current directory path").with_execution(|_| {
         let path = env::current_dir();
         let path_str = path?
             .to_str()
