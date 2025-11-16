@@ -1,9 +1,10 @@
 use core::fmt;
-use std::{any::TypeId, error::Error};
+use std::{any::TypeId, collections::HashMap, error::Error};
 
-use gemini_rust::FunctionDeclaration;
+use gemini_rust::{FunctionDeclaration, Tool};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde_json::Value;
 
 #[derive(Debug)]
 struct NotImplementedError {
@@ -34,13 +35,14 @@ pub struct DirectoryPath {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
-pub struct ReadFileContents {
-    pub directory: String,
-    pub filename: String,
+pub struct ReadInput {
+    pub filepath: String,
+    pub offset: Option<u32>,
+    pub limit: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
-pub struct ReadFileContentsResult {
+pub struct ReadOutput {
     pub file_contents: String,
 }
 
@@ -50,13 +52,21 @@ pub struct MyTool<'a, A: JsonSchema + Serialize, R: JsonSchema + for<'de> Deseri
     execution: fn(arg: A) -> Result<R, Box<dyn Error>>, // pub declaration: fn() -> FunctionDeclaration,
 }
 
-pub trait WithFunctionDeclaration {
+pub trait ExecutableTool {
+    fn get_name(&self) -> String;
     fn get_declaration(&self) -> FunctionDeclaration;
+    fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, Box<dyn Error>>;
 }
 
-impl<'a, A: JsonSchema + Serialize + 'static, R: JsonSchema + for<'de> Deserialize<'de> + Serialize>
-    WithFunctionDeclaration for MyTool<'a, A, R>
+impl<
+    'a,
+    A: JsonSchema + Serialize + DeserializeOwned + 'static,
+    R: JsonSchema + for<'de> Deserialize<'de> + Serialize,
+> ExecutableTool for MyTool<'a, A, R>
 {
+    fn get_name(&self) -> String {
+        self.name.to_string()
+    }
     fn get_declaration(&self) -> FunctionDeclaration {
         let mut function_declaration =
             FunctionDeclaration::new(self.name, self.description, None).with_response::<R>();
@@ -64,6 +74,20 @@ impl<'a, A: JsonSchema + Serialize + 'static, R: JsonSchema + for<'de> Deseriali
             function_declaration = function_declaration.with_parameters::<A>()
         }
         function_declaration
+    }
+    fn execute(&self, args: Value) -> Result<Value, Box<dyn Error>> {
+        // Deserialize JSON args to the concrete type A
+        let typed_args: A =
+            serde_json::from_value(args).map_err(|e| Box::new(e) as Box<dyn Error>)?;
+
+        // Call the tool's run function
+        let result: R = self.run(typed_args)?;
+
+        // Serialize the result back to JSON
+        let json_result =
+            serde_json::to_value(result).map_err(|e| Box::new(e) as Box<dyn Error>)?;
+
+        Ok(json_result)
     }
 }
 
@@ -90,7 +114,49 @@ impl<'a, A: JsonSchema + Serialize, R: JsonSchema + for<'de> Deserialize<'de> + 
         }
     }
 
-    pub fn run(self, arg: A) -> Result<R, Box<dyn Error>> {
+    pub fn run(&self, arg: A) -> Result<R, Box<dyn Error>> {
         (self.execution)(arg)
+    }
+}
+
+pub struct ToolRegistry {
+    map: HashMap<String, Box<dyn ExecutableTool>>,
+}
+
+impl ToolRegistry {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    pub fn register<
+        'a,
+        A: JsonSchema + Serialize + DeserializeOwned + 'static,
+        R: JsonSchema + for<'de> Deserialize<'de> + Serialize + 'static,
+    >(
+        &mut self,
+        tool: MyTool<'static, A, R>,
+    ) -> &Self {
+        self.map.insert(tool.get_name().to_string(), Box::new(tool));
+        self
+    }
+
+    pub fn get(&self, name: String) -> Option<&Box<dyn ExecutableTool>> {
+        self.map.get(&name)
+    }
+
+    pub fn all_tools(&self) -> Vec<&dyn ExecutableTool> {
+        self.map.values().map(|t| t.as_ref()).collect()
+    }
+
+    pub fn get_gemini_tool(&self) -> Tool {
+        let declarations: Vec<FunctionDeclaration> = self
+            .all_tools()
+            .iter()
+            .map(|tool| tool.get_declaration())
+            .collect();
+
+        Tool::with_functions(declarations)
     }
 }

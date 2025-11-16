@@ -11,7 +11,7 @@ use tempfile::TempDir;
 #[test]
 fn test_get_directory_contents_empty_dir() {
     let temp_dir = TempDir::new().unwrap();
-    let tool = get_directory_contents();
+    let tool = ls();
     let contents = tool
         .run(DirectoryPath {
             path: temp_dir.path().to_str().unwrap().to_string(),
@@ -29,7 +29,7 @@ fn test_get_directory_contents_with_files() {
     File::create(temp_path.join("file1.txt")).unwrap();
     File::create(temp_path.join("file2.rs")).unwrap();
 
-    let mut contents = get_directory_contents()
+    let mut contents = ls()
         .run(DirectoryPath {
             path: temp_dir.path().to_str().unwrap().to_string(),
         })
@@ -50,7 +50,7 @@ fn test_get_directory_contents_with_subdirs() {
     fs::create_dir(temp_path.join("subdir")).unwrap();
     File::create(temp_path.join("file.txt")).unwrap();
 
-    let mut contents = get_directory_contents()
+    let mut contents = ls()
         .run(DirectoryPath {
             path: temp_dir.path().to_str().unwrap().to_string(),
         })
@@ -64,7 +64,7 @@ fn test_get_directory_contents_with_subdirs() {
 
 #[test]
 fn test_get_directory_contents_nonexistent_path() {
-    let result = get_directory_contents().run(DirectoryPath {
+    let result = ls().run(DirectoryPath {
         path: "/nonexistent/path".to_string(),
     });
     assert!(result.is_err());
@@ -81,7 +81,7 @@ fn test_get_directory_contents_file_as_path() {
         .to_string();
     File::create(&file_path).unwrap();
 
-    let result = get_directory_contents().run(DirectoryPath { path: file_path });
+    let result = ls().run(DirectoryPath { path: file_path });
     assert!(result.is_err());
 }
 
@@ -129,8 +129,8 @@ fn test_read_file_contents_success() {
     writeln!(file, "Hello, World!").unwrap();
     writeln!(file, "This is a test file.").unwrap();
 
-    let result = read_file_contents()
-        .run(ReadFileContents {
+    let result = read()
+        .run(ReadInput {
             directory: temp_path.to_str().unwrap().to_string(),
             filename: "test.txt".to_string(),
         })
@@ -150,8 +150,8 @@ fn test_read_file_contents_empty_file() {
     // Create empty file
     File::create(temp_path.join("empty.txt")).unwrap();
 
-    let result = read_file_contents()
-        .run(ReadFileContents {
+    let result = read()
+        .run(ReadInput {
             directory: temp_path.to_str().unwrap().to_string(),
             filename: "empty.txt".to_string(),
         })
@@ -164,7 +164,7 @@ fn test_read_file_contents_empty_file() {
 fn test_read_file_contents_nonexistent_file() {
     let temp_dir = TempDir::new().unwrap();
 
-    let result = read_file_contents().run(ReadFileContents {
+    let result = read().run(ReadInput {
         directory: temp_dir.path().to_str().unwrap().to_string(),
         filename: "nonexistent.txt".to_string(),
     });
@@ -174,7 +174,7 @@ fn test_read_file_contents_nonexistent_file() {
 
 #[test]
 fn test_read_file_contents_nonexistent_directory() {
-    let result = read_file_contents().run(ReadFileContents {
+    let result = read().run(ReadInput {
         directory: "/nonexistent/directory".to_string(),
         filename: "test.txt".to_string(),
     });
@@ -194,8 +194,8 @@ fn test_read_file_contents_with_subdirectory() {
     let mut file = File::create(subdir.join("nested.txt")).unwrap();
     writeln!(file, "Nested file content").unwrap();
 
-    let result = read_file_contents()
-        .run(ReadFileContents {
+    let result = read()
+        .run(ReadInput {
             directory: subdir.to_str().unwrap().to_string(),
             filename: "nested.txt".to_string(),
         })
@@ -213,8 +213,8 @@ fn test_read_file_contents_unicode() {
     let mut file = File::create(temp_path.join("unicode.txt")).unwrap();
     writeln!(file, "Hello 世界! 🦀").unwrap();
 
-    let result = read_file_contents()
-        .run(ReadFileContents {
+    let result = read()
+        .run(ReadInput {
             directory: temp_path.to_str().unwrap().to_string(),
             filename: "unicode.txt".to_string(),
         })
@@ -232,7 +232,7 @@ fn test_read_file_contents_binary_file() {
     let binary_data = vec![0u8, 1u8, 2u8, 255u8];
     fs::write(temp_path.join("binary.bin"), &binary_data).unwrap();
 
-    let result = read_file_contents().run(ReadFileContents {
+    let result = read().run(ReadInput {
         directory: temp_path.to_str().unwrap().to_string(),
         filename: "binary.bin".to_string(),
     });
@@ -255,7 +255,7 @@ fn test_read_file_contents_directory_as_filename() {
     // Create subdirectory
     fs::create_dir(temp_path.join("subdir")).unwrap();
 
-    let result = read_file_contents().run(ReadFileContents {
+    let result = read().run(ReadInput {
         directory: temp_path.to_str().unwrap().to_string(),
         filename: "subdir".to_string(),
     });
@@ -273,7 +273,7 @@ fn test_read_file_contents_path_traversal() {
     writeln!(file, "Secret content").unwrap();
 
     // Try to read using path traversal (this should still work as Path::join handles it)
-    let result = read_file_contents().run(ReadFileContents {
+    let result = read().run(ReadInput {
         directory: temp_path.to_str().unwrap().to_string(),
         filename: "../secret.txt".to_string(),
     });
