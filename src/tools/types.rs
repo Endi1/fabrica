@@ -49,7 +49,7 @@ pub struct ReadOutput {
 pub struct MyTool<'a, A: JsonSchema + Serialize, R: JsonSchema + for<'de> Deserialize<'de>> {
     pub name: &'a str,
     pub description: &'a str,
-    execution: fn(arg: A) -> Result<R, Box<dyn Error>>, // pub declaration: fn() -> FunctionDeclaration,
+    execution: fn(arg: A) -> Result<R, Box<dyn Error>>,
 }
 
 pub trait ExecutableTool {
@@ -139,8 +139,8 @@ impl ToolRegistry {
         self
     }
 
-    pub fn get(&self, name: String) -> Option<&Box<dyn ExecutableTool>> {
-        self.map.get(&name)
+    pub fn get(&self, name: String) -> Option<&dyn ExecutableTool> {
+        self.map.get(&name).map(|v| &**v)
     }
 
     pub fn all_tools(&self) -> Vec<&dyn ExecutableTool> {
