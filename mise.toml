@@ -1,0 +1,9 @@
+[tools]
+rust = "latest"
+
+[env]
+_.file = ".env"
+
+[tasks.test]
+description = "Run all tests"
+run = "cargo test"
