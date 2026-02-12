@@ -1,3 +1,5 @@
+use futures::StreamExt;
+use langrust::StreamEvent;
 use langrust::client::Model;
 use langrust::{GeminiApiModel, GeminiModel, Message, client::FunctionCall};
 use std::error::Error;
@@ -34,7 +36,7 @@ async fn main() -> ExitCode {
 }
 
 fn get_input() -> Result<String, Box<dyn Error + Send + Sync>> {
-    print!("> ");
+    print!("\n> ");
     io::stdout().flush()?;
 
     let mut input = String::new();
@@ -44,10 +46,8 @@ fn get_input() -> Result<String, Box<dyn Error + Send + Sync>> {
 }
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Get API key from environment variable
     let api_key = env::var("GEMINI_KEY").expect("GEMINI_KEY environment variable not set");
 
-    // Create a Gemini client with default settings (Gemini 2.5 Flash)
     let client = GeminiApiModel {
         client: reqwest::Client::new(),
         api_key: api_key,
@@ -60,7 +60,6 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 async fn conversation_loop(client: &GeminiApiModel) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut state = Conversation { contents: vec![] };
-    // let tool_registry = get_filesystem_registry();
     loop {
         let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on";
         let user_message_content = get_input()?;
@@ -77,11 +76,22 @@ async fn conversation_loop(client: &GeminiApiModel) -> Result<(), Box<dyn Error 
             .with_system(system_prompt.to_string())
             .with_messages(state.contents.clone());
 
-        let response = request.completion().await?;
+        let mut stream = request.stream().await?;
+        let mut full_response = String::new();
 
-        println!("{}", response.completion);
+        while let Some(event) = stream.next().await {
+            match event {
+                StreamEvent::Delta(t) => {
+                    full_response.push_str(&t);
+                    print!("{}", t);
+                }
+                StreamEvent::Error(e) => panic!("stream event should not be an error: {}", e),
+                StreamEvent::Usage(u) => continue,
+                StreamEvent::FunctionCall(_) => println!("function call"),
+            }
+        }
 
-        _ = state.add_message(Message::model(response.completion));
+        _ = state.add_message(Message::model(full_response));
     }
     Ok(())
 }

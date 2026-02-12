@@ -7,3 +7,7 @@ _.file = ".env"
 [tasks.test]
 description = "Run all tests"
 run = "cargo test"
+
+[tasks.run]
+description = "Run the agent"
+run = "cargo run"
