@@ -1,10 +1,8 @@
 use std::{env, fs, io::Error, path::Path};
 
-use serde_json::Value;
-
 use crate::tools::{
-    CurrentPathResult, DirectoryContentsResult, DirectoryPath, MyTool, ReadInput, ReadOutput,
-    ToolRegistry,
+    CurrentPathResult, DirectoryContentsResult, DirectoryPath, ExecutableTool, ReadInput,
+    ReadOutput, ToolRegistry,
 };
 
 pub fn get_filesystem_registry() -> ToolRegistry {
@@ -15,36 +13,39 @@ pub fn get_filesystem_registry() -> ToolRegistry {
     registry
 }
 
-pub fn ls() -> MyTool<'static, DirectoryPath, DirectoryContentsResult> {
-    MyTool::new(
+pub fn ls() -> ExecutableTool {
+    ExecutableTool::new(
         "ls",
         "Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path.",
+        |arg: DirectoryPath| {
+            let entries = fs::read_dir(arg.path)?;
+            let mut contents = Vec::new();
+            for entry in entries {
+                let entry = entry?;
+                contents.push(entry.file_name().to_string_lossy().to_string());
+            }
+            Ok(DirectoryContentsResult { contents })
+        },
     )
-    .with_execution(|arg| {
-        let entries = fs::read_dir(arg.path)?;
-        let mut contents = Vec::new();
-        for entry in entries {
-            let entry = entry?;
-            contents.push(entry.file_name().to_string_lossy().to_string());
-        }
-
-        Ok(DirectoryContentsResult { contents })
-    })
 }
 
-pub fn get_current_path() -> MyTool<'static, Value, CurrentPathResult> {
-    MyTool::new("get_current_path", "Get the current directory path").with_execution(|_| {
-        let path = env::current_dir();
-        let path_str = path?
-            .to_str()
-            .ok_or(Error::new(std::io::ErrorKind::NotFound, "Path not found"))?
-            .to_string();
-        Ok(CurrentPathResult { path: path_str })
-    })
+pub fn get_current_path() -> ExecutableTool {
+    ExecutableTool::new(
+        "get_current_path",
+        "Get the current directory path",
+        |_: serde_json::Value| {
+            let path = env::current_dir();
+            let path_str = path?
+                .to_str()
+                .ok_or(Error::new(std::io::ErrorKind::NotFound, "Path not found"))?
+                .to_string();
+            Ok(CurrentPathResult { path: path_str })
+        },
+    )
 }
 
-pub fn read() -> MyTool<'static, ReadInput, ReadOutput> {
-    MyTool::new(
+pub fn read() -> ExecutableTool {
+    ExecutableTool::new(
         "read",
         "Reads a file from the local filesystem. You can access any file directly by using this tool.
 Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
@@ -62,13 +63,12 @@ Usage:
 - You will regularly be asked to read screenshots. If the user provides a path to a screenshot ALWAYS use this tool to view the file at the path. This tool will work with all temporary file paths like /var/folders/123/abc/T/TemporaryItems/NSIRD_screencaptureui_ZfB1tD/Screenshot.png
 - If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
 ",
+        |arg: ReadInput| {
+            let file_path = Path::new(&arg.filepath);
+            let contents = fs::read_to_string(file_path)?;
+            Ok(ReadOutput {
+                file_contents: contents,
+            })
+        },
     )
-    .with_execution(|arg: ReadInput| {
-        let file_path = Path::new(&arg.filepath);
-        let contents = fs::read_to_string(file_path)?;
-
-        Ok(ReadOutput {
-            file_contents: contents,
-        })
-    })
 }
