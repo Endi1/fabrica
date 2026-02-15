@@ -1,11 +1,10 @@
 use std::{env, fs, io::Error, path::Path};
 
-use gemini_rust::{FunctionDeclaration, Tool};
 use serde_json::Value;
 
 use crate::tools::{
-    CurrentPathResult, DirectoryContentsResult, DirectoryPath, ExecutableTool, MyTool, ReadInput,
-    ReadOutput, ToolRegistry,
+    CurrentPathResult, DirectoryContentsResult, DirectoryPath, MyTool, ReadInput, ReadOutput,
+    ToolRegistry,
 };
 
 pub fn get_filesystem_registry() -> ToolRegistry {
@@ -14,16 +13,6 @@ pub fn get_filesystem_registry() -> ToolRegistry {
     registry.register(get_current_path());
     registry.register(read());
     registry
-}
-
-pub fn get_tools() -> Tool {
-    let declarations: Vec<FunctionDeclaration> = vec![
-        ls().get_declaration(),
-        get_current_path().get_declaration(),
-        read().get_declaration(),
-    ];
-
-    Tool::with_functions(declarations)
 }
 
 pub fn ls() -> MyTool<'static, DirectoryPath, DirectoryContentsResult> {

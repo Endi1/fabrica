@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{any::TypeId, collections::HashMap, error::Error};
 
-use gemini_rust::{FunctionDeclaration, Tool};
+use langrust::Tool;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -54,7 +54,7 @@ pub struct MyTool<'a, A: JsonSchema + Serialize, R: JsonSchema + for<'de> Deseri
 
 pub trait ExecutableTool {
     fn get_name(&self) -> String;
-    fn get_declaration(&self) -> FunctionDeclaration;
+    fn get_tool_declaration(&self) -> Tool;
     fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, Box<dyn Error>>;
 }
 
@@ -67,13 +67,17 @@ impl<
     fn get_name(&self) -> String {
         self.name.to_string()
     }
-    fn get_declaration(&self) -> FunctionDeclaration {
-        let mut function_declaration =
-            FunctionDeclaration::new(self.name, self.description, None).with_response::<R>();
+    fn get_tool_declaration(&self) -> Tool {
+        let tool = Tool {
+            name: self.name.to_string(),
+            description: self.description.to_string(),
+            parameters: None,
+        };
         if TypeId::of::<A>() != TypeId::of::<()>() {
-            function_declaration = function_declaration.with_parameters::<A>()
+            tool.clone().with_parameter::<A>().unwrap_or(tool)
+        } else {
+            tool
         }
-        function_declaration
     }
     fn execute(&self, args: Value) -> Result<Value, Box<dyn Error>> {
         let typed_args: A =
@@ -139,21 +143,38 @@ impl ToolRegistry {
         self
     }
 
-    pub fn get(&self, name: String) -> Option<&dyn ExecutableTool> {
-        self.map.get(&name).map(|v| &**v)
+    pub fn get(&self, name: &str) -> Option<&dyn ExecutableTool> {
+        self.map.get(name).map(|v| &**v)
     }
 
     pub fn all_tools(&self) -> Vec<&dyn ExecutableTool> {
         self.map.values().map(|t| t.as_ref()).collect()
     }
 
-    pub fn get_gemini_tool(&self) -> Tool {
-        let declarations: Vec<FunctionDeclaration> = self
-            .all_tools()
+    pub fn get_tool_declarations(&self) -> Vec<Tool> {
+        self.all_tools()
             .iter()
-            .map(|tool| tool.get_declaration())
-            .collect();
+            .map(|tool| tool.get_tool_declaration())
+            .collect()
+    }
 
-        Tool::with_functions(declarations)
+    pub fn execute(
+        &self,
+        tool_name: &str,
+        args_value: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        match self.get(tool_name) {
+            Some(tool) => match tool.execute(args_value) {
+                Ok(result) => Ok(result),
+                Err(e) => {
+                    let error_msg = format!("Tool execution error: {}", e);
+                    Err(error_msg.into())
+                }
+            },
+            None => {
+                let error_msg = format!("Unknown tool: {}", tool_name);
+                Err(error_msg.into())
+            }
+        }
     }
 }
