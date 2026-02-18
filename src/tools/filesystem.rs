@@ -2,7 +2,7 @@ use std::{env, fs, io::Error, path::Path};
 
 use crate::tools::{
     CurrentPathResult, DirectoryContentsResult, DirectoryPath, ExecutableTool, ReadInput,
-    ReadOutput, ToolRegistry,
+    ReadOutput, ToolRegistry, bash,
 };
 
 pub fn get_filesystem_registry() -> ToolRegistry {
@@ -10,6 +10,7 @@ pub fn get_filesystem_registry() -> ToolRegistry {
     registry.register(ls());
     registry.register(get_current_path());
     registry.register(read());
+    registry.register(bash());
     registry
 }
 
