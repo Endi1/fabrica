@@ -106,7 +106,11 @@ async fn conversation_loop(
 
             match pending_function_call {
                 Some(fc) => {
-                    println!("\n[tool: {}]", fc.name);
+                    println!(
+                        "\n[tool: {}] [args: {}]",
+                        fc.name,
+                        serde_json::to_string(&fc.args).unwrap_or_default()
+                    );
 
                     // Add the model's function call to conversation
                     state.add_message(Message::function_call(fc.clone()));
