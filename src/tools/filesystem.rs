@@ -1,48 +1,12 @@
-use std::{env, fs, io::Error, path::Path};
+use std::{fs, path::Path};
 
-use crate::tools::{
-    CurrentPathResult, DirectoryContentsResult, DirectoryPath, ExecutableTool, ReadInput,
-    ReadOutput, ToolRegistry, bash,
-};
+use crate::tools::{ExecutableTool, ReadInput, ReadOutput, ToolRegistry, bash};
 
 pub fn get_filesystem_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
-    registry.register(ls());
-    registry.register(get_current_path());
     registry.register(read());
     registry.register(bash());
     registry
-}
-
-pub fn ls() -> ExecutableTool {
-    ExecutableTool::new(
-        "ls",
-        "Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path.",
-        |arg: DirectoryPath| {
-            let entries = fs::read_dir(arg.path)?;
-            let mut contents = Vec::new();
-            for entry in entries {
-                let entry = entry?;
-                contents.push(entry.file_name().to_string_lossy().to_string());
-            }
-            Ok(DirectoryContentsResult { contents })
-        },
-    )
-}
-
-pub fn get_current_path() -> ExecutableTool {
-    ExecutableTool::new(
-        "get_current_path",
-        "Get the current directory path",
-        |_: serde_json::Value| {
-            let path = env::current_dir();
-            let path_str = path?
-                .to_str()
-                .ok_or(Error::new(std::io::ErrorKind::NotFound, "Path not found"))?
-                .to_string();
-            Ok(CurrentPathResult { path: path_str })
-        },
-    )
 }
 
 pub fn read() -> ExecutableTool {
