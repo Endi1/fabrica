@@ -7,7 +7,9 @@ use std::io::Write;
 use std::process::ExitCode;
 use std::{env, io};
 
+mod core;
 mod tools;
+use core::get_system_prompt;
 use tools::{ToolRegistry, get_filesystem_registry};
 
 pub struct Conversation {
@@ -61,7 +63,7 @@ async fn conversation_loop(
     registry: &ToolRegistry,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut state = Conversation { contents: vec![] };
-    let system_prompt = "You are a helpful coding assistant that has access to the file contents of the project the user is working on. Use the available tools to read files and explore the filesystem.";
+    let system_prompt = get_system_prompt();
     let tool_declarations = registry.get_tool_declarations();
 
     loop {

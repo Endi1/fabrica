@@ -1,2 +1,3 @@
 /target
 .env
+/.agent-shell/
