@@ -34,6 +34,38 @@ pub struct ReadOutput {
     pub file_contents: String,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct WriteInput {
+    pub filepath: String,
+    pub content: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct WriteOutput {
+    pub bytes_written: u64,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct EditInput {
+    pub filepath: String,
+    /// 1-indexed line number where the replacement starts (inclusive).
+    pub start_line: u32,
+    /// 1-indexed column number where the replacement starts (inclusive).
+    pub start_column: u32,
+    /// 1-indexed line number where the replacement ends (inclusive).
+    pub end_line: u32,
+    /// 1-indexed column number where the replacement ends (exclusive).
+    pub end_column: u32,
+    /// The new text that will replace the selected region.
+    pub new_content: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct EditOutput {
+    pub bytes_written: u64,
+    pub replaced_text: String,
+}
+
 pub struct ExecutableTool {
     pub declaration: Tool,
     execute_fn: ExecuteFn,
