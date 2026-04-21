@@ -80,6 +80,8 @@ async fn conversation_loop(
         loop {
             let mut request_builder = client.new_request();
             let request = request_builder
+                // TODO Make the settings configurable by the user
+                .with_settings(langrust::Settings {temperature: Some(0), max_tokens: None, timeout: None, thinking_budget: None})
                 .with_system(system_prompt.to_string())
                 .with_messages(state.contents.clone())
                 .with_tools(tool_declarations.clone());
