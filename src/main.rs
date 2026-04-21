@@ -1,15 +1,15 @@
 use futures::StreamExt;
 use langrust::StreamEvent;
-use langrust::client::Model;
-use langrust::{GeminiApiModel, GeminiModel, Message, client::FunctionCall};
+use langrust::client::{Model, ModelRequestBuilder};
+use langrust::{Message, client::FunctionCall};
 use std::error::Error;
+use std::io;
 use std::io::Write;
 use std::process::ExitCode;
-use std::{env, io};
 
 mod core;
 mod tools;
-use core::get_system_prompt;
+use core::{default_model, get_system_prompt, pick_model};
 use tools::{ToolRegistry, get_filesystem_registry};
 
 pub struct Conversation {
@@ -44,33 +44,36 @@ fn get_input() -> Result<String, Box<dyn Error + Send + Sync>> {
 }
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let api_key = env::var("GEMINI_KEY").expect("GEMINI_KEY environment variable not set");
-
-    let client = GeminiApiModel {
-        client: reqwest::Client::new(),
-        api_key,
-        model: GeminiModel::Gemini25Flash,
-    };
-
     let registry = get_filesystem_registry();
-    conversation_loop(&client, &registry).await?;
+    conversation_loop(&registry).await?;
 
     Ok(())
 }
 
-async fn conversation_loop(
-    client: &GeminiApiModel,
-    registry: &ToolRegistry,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn conversation_loop(registry: &ToolRegistry) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut client = default_model()?;
     let mut state = Conversation { contents: vec![] };
     let system_prompt = get_system_prompt();
     let tool_declarations = registry.get_tool_declarations();
 
     loop {
         let user_message_content = get_input()?;
+        let trimmed = user_message_content.trim();
 
-        if user_message_content.trim() == "/exit" {
+        if trimmed == "/exit" {
             break;
+        }
+
+        if trimmed == "/model" {
+            match pick_model() {
+                Ok(new_client) => {
+                    client = new_client;
+                }
+                Err(e) => {
+                    eprintln!("Failed to switch model: {}", e);
+                }
+            }
+            continue;
         }
 
         let user_message = Message::user(user_message_content);
@@ -78,10 +81,15 @@ async fn conversation_loop(
 
         // Inner loop: keep calling the model until we get a text response (no more tool calls)
         loop {
-            let mut request_builder = client.new_request();
+            let mut request_builder = ModelRequestBuilder::new(client.as_ref() as &dyn Model);
             let request = request_builder
                 // TODO Make the settings configurable by the user
-                .with_settings(langrust::Settings {temperature: Some(0), max_tokens: None, timeout: None, thinking_budget: None})
+                .with_settings(langrust::Settings {
+                    temperature: None,
+                    max_tokens: None,
+                    timeout: None,
+                    thinking_budget: None,
+                })
                 .with_system(system_prompt.to_string())
                 .with_messages(state.contents.clone())
                 .with_tools(tool_declarations.clone());
