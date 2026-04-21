@@ -79,7 +79,11 @@ pub fn default_model() -> BuildResult {
 pub fn pick_model() -> BuildResult {
     println!("Select a provider/model:");
     for (i, c) in CHOICES.iter().enumerate() {
-        let marker = if i == DEFAULT_CHOICE_INDEX { " (default)" } else { "" };
+        let marker = if i == DEFAULT_CHOICE_INDEX {
+            " (default)"
+        } else {
+            ""
+        };
         println!("  {}. {}{}", i + 1, c.label, marker);
     }
 
