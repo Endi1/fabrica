@@ -1,18 +1,33 @@
 use futures::StreamExt;
-use std::{
-    error::Error,
-    io::{self, Write},
-};
+use std::error::Error;
 
 use langrust::{
     Message, StreamEvent,
-    client::{FunctionCall, Model, ModelRequestBuilder},
+    client::{Model, ModelRequestBuilder},
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     core::{default_model, model_picker::BoxedModel},
     tools::ToolRegistry,
 };
+
+#[derive(Debug, Clone)]
+pub enum AgentEvent {
+    TextDelta(String),
+    TextDone(()),
+    ToolCall {
+        name: String,
+        args: serde_json::Value,
+    },
+    ToolResult {
+        result: serde_json::Value,
+    },
+    ToolError {
+        error: String,
+    },
+    StreamError(String),
+}
 
 pub struct Conversation {
     pub contents: Vec<Message>,
@@ -40,17 +55,18 @@ impl Agent {
         system_prompt: String,
         registry: ToolRegistry,
     ) -> Result<Agent, Box<dyn Error + Send + Sync>> {
-        return Ok(Agent {
+        Ok(Agent {
             conversation: Conversation::new(),
             system_prompt,
             registry,
             model: default_model()?,
-        });
+        })
     }
 
     pub async fn send_user_message(
         &mut self,
         user_message: Message,
+        event_channel: UnboundedSender<AgentEvent>,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.conversation.add_message(user_message);
         let tool_declarations = self.registry.get_tool_declarations();
@@ -71,17 +87,16 @@ impl Agent {
 
             let mut stream = request.stream().await?;
             let mut full_response = String::new();
-            let mut pending_function_call: Option<FunctionCall> = None;
+            let mut pending_function_call = None;
 
             while let Some(event) = stream.next().await {
                 match event {
                     StreamEvent::Delta(t) => {
                         full_response.push_str(&t);
-                        print!("{}", t);
-                        io::stdout().flush().ok();
+                        let _ = event_channel.send(AgentEvent::TextDelta(t));
                     }
                     StreamEvent::Error(e) => {
-                        eprintln!("\nStream error: {}", e);
+                        let _ = event_channel.send(AgentEvent::StreamError(e.to_string()));
                         break;
                     }
                     StreamEvent::Usage(_) => continue,
@@ -93,50 +108,42 @@ impl Agent {
 
             match pending_function_call {
                 Some(fc) => {
-                    println!(
-                        "\n[tool: {}] [args: {}]",
-                        fc.name,
-                        serde_json::to_string(&fc.args).unwrap_or_default()
-                    );
+                    let args_value = serde_json::to_value(&fc.args)?;
+                    let _ = event_channel.send(AgentEvent::ToolCall {
+                        name: fc.name.clone(),
+                        args: args_value.clone(),
+                    });
 
-                    // Add the model's function call to conversation
                     self.conversation
                         .add_message(Message::function_call(fc.clone()));
 
-                    // Execute the tool
-                    let args_value = serde_json::to_value(&fc.args)?;
-                    let function_call_result = self.registry.execute(&fc.name, args_value);
-                    match function_call_result {
+                    match self.registry.execute(&fc.name, args_value) {
                         Ok(result) => {
-                            let result_str = serde_json::to_string_pretty(&result)
-                                .unwrap_or_else(|_| result.to_string());
-                            println!(
-                                "[result: {}...]\n",
-                                &result_str[..result_str.len().min(200)]
-                            );
-
-                            // Add the function result to conversation — pass Value directly
+                            let _ = event_channel.send(AgentEvent::ToolResult {
+                                result: result.clone(),
+                            });
                             self.conversation
                                 .add_message(Message::function_result(fc.name, result));
                         }
                         Err(e) => {
                             let error_msg = format!("Tool execution error: {}", e);
-                            eprintln!("[error: {}]", error_msg);
+                            let _ = event_channel.send(AgentEvent::ToolError {
+                                error: error_msg.clone(),
+                            });
                             self.conversation.add_message(Message::function_result(
                                 fc.name,
                                 serde_json::json!({ "error": error_msg }),
                             ));
                         }
                     }
-                    // Continue the loop to let the model respond with the tool result
                     continue;
                 }
                 None => {
-                    // No function call — model gave a text response
                     if !full_response.is_empty() {
-                        self.conversation.add_message(Message::model(full_response));
+                        self.conversation
+                            .add_message(Message::model(full_response.clone()));
                     }
-                    println!(); // newline after response
+                    let _ = event_channel.send(AgentEvent::TextDone(()));
                     break;
                 }
             }
