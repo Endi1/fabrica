@@ -4,7 +4,7 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Write};
 
-type BoxedModel = Box<dyn Model + Send + Sync>;
+pub type BoxedModel = Box<dyn Model + Send + Sync>;
 type BuildResult = Result<BoxedModel, Box<dyn Error + Send + Sync>>;
 
 enum Provider {

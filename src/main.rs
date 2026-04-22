@@ -1,26 +1,18 @@
-use futures::StreamExt;
-use langrust::StreamEvent;
-use langrust::client::{Model, ModelRequestBuilder};
-use langrust::{Message, client::FunctionCall};
+use langrust::Message;
 use std::error::Error;
 use std::io;
 use std::io::Write;
 use std::process::ExitCode;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 mod core;
 mod tools;
-use core::{default_model, get_system_prompt, pick_model};
-use tools::{ToolRegistry, get_filesystem_registry};
+use core::{get_system_prompt, pick_model};
 
-pub struct Conversation {
-    pub contents: Vec<Message>,
-}
-
-impl Conversation {
-    pub fn add_message(&mut self, message: Message) {
-        self.contents.push(message);
-    }
-}
+use crate::{
+    core::agent::{Agent, AgentEvent},
+    tools::get_filesystem_registry,
+};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -45,17 +37,14 @@ fn get_input() -> Result<String, Box<dyn Error + Send + Sync>> {
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let registry = get_filesystem_registry();
-    conversation_loop(&registry).await?;
+    let sp = get_system_prompt();
+    let mut agent = Agent::new(sp, registry)?;
+    conversation_loop(&mut agent).await?;
 
     Ok(())
 }
 
-async fn conversation_loop(registry: &ToolRegistry) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let mut client = default_model()?;
-    let mut state = Conversation { contents: vec![] };
-    let system_prompt = get_system_prompt();
-    let tool_declarations = registry.get_tool_declarations();
-
+async fn conversation_loop(agent: &mut Agent) -> Result<(), Box<dyn Error + Send + Sync>> {
     loop {
         let user_message_content = get_input()?;
         let trimmed = user_message_content.trim();
@@ -67,7 +56,7 @@ async fn conversation_loop(registry: &ToolRegistry) -> Result<(), Box<dyn Error 
         if trimmed == "/model" {
             match pick_model() {
                 Ok(new_client) => {
-                    client = new_client;
+                    agent.set_model(new_client);
                 }
                 Err(e) => {
                     eprintln!("Failed to switch model: {}", e);
@@ -77,93 +66,50 @@ async fn conversation_loop(registry: &ToolRegistry) -> Result<(), Box<dyn Error 
         }
 
         let user_message = Message::user(user_message_content);
-        state.add_message(user_message);
+        let (event_channel_sender, event_channel_receiver) =
+            mpsc::unbounded_channel::<AgentEvent>();
 
-        // Inner loop: keep calling the model until we get a text response (no more tool calls)
-        loop {
-            let mut request_builder = ModelRequestBuilder::new(client.as_ref() as &dyn Model);
-            let request = request_builder
-                // TODO Make the settings configurable by the user
-                .with_settings(langrust::Settings {
-                    temperature: None,
-                    max_tokens: None,
-                    timeout: None,
-                    thinking_budget: None,
-                })
-                .with_system(system_prompt.to_string())
-                .with_messages(state.contents.clone())
-                .with_tools(tool_declarations.clone());
+        // Run the agent and render its events concurrently on this task.
+        let (send_result, _) = tokio::join!(
+            agent.send_user_message(user_message, event_channel_sender),
+            display_events(event_channel_receiver),
+        );
+        send_result?;
+    }
+    Ok(())
+}
 
-            let mut stream = request.stream().await?;
-            let mut full_response = String::new();
-            let mut pending_function_call: Option<FunctionCall> = None;
-
-            while let Some(event) = stream.next().await {
-                match event {
-                    StreamEvent::Delta(t) => {
-                        full_response.push_str(&t);
-                        print!("{}", t);
-                        io::stdout().flush().ok();
-                    }
-                    StreamEvent::Error(e) => {
-                        eprintln!("\nStream error: {}", e);
-                        break;
-                    }
-                    StreamEvent::Usage(_) => continue,
-                    StreamEvent::FunctionCall(fc) => {
-                        pending_function_call = Some(fc);
-                    }
-                }
+async fn display_events(mut rx: UnboundedReceiver<AgentEvent>) {
+    while let Some(event) = rx.recv().await {
+        match event {
+            AgentEvent::TextDelta(t) => {
+                print!("{}", t);
+                io::stdout().flush().ok();
             }
-
-            match pending_function_call {
-                Some(fc) => {
-                    println!(
-                        "\n[tool: {}] [args: {}]",
-                        fc.name,
-                        serde_json::to_string(&fc.args).unwrap_or_default()
-                    );
-
-                    // Add the model's function call to conversation
-                    state.add_message(Message::function_call(fc.clone()));
-
-                    // Execute the tool
-                    let args_value = serde_json::to_value(&fc.args)?;
-                    let function_call_result = registry.execute(&fc.name, args_value);
-                    match function_call_result {
-                        Ok(result) => {
-                            let result_str = serde_json::to_string_pretty(&result)
-                                .unwrap_or_else(|_| result.to_string());
-                            println!(
-                                "[result: {}...]\n",
-                                &result_str[..result_str.len().min(200)]
-                            );
-
-                            // Add the function result to conversation — pass Value directly
-                            state.add_message(Message::function_result(fc.name, result));
-                        }
-                        Err(e) => {
-                            let error_msg = format!("Tool execution error: {}", e);
-                            eprintln!("[error: {}]", error_msg);
-                            state.add_message(Message::function_result(
-                                fc.name,
-                                serde_json::json!({ "error": error_msg }),
-                            ));
-                        }
-                    }
-                    // Continue the loop to let the model respond with the tool result
-                    continue;
-                }
-                None => {
-                    // No function call — model gave a text response
-                    if !full_response.is_empty() {
-                        state.add_message(Message::model(full_response));
-                    }
-                    println!(); // newline after response
-                    break;
-                }
+            AgentEvent::TextDone(_) => {
+                println!();
+            }
+            AgentEvent::ToolCall { name, args } => {
+                println!(
+                    "\n[tool: {}] [args: {}]",
+                    name,
+                    serde_json::to_string(&args).unwrap_or_default()
+                );
+            }
+            AgentEvent::ToolResult { result } => {
+                let result_str =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string());
+                println!(
+                    "[result: {}...]\n",
+                    &result_str[..result_str.len().min(200)]
+                );
+            }
+            AgentEvent::ToolError { error } => {
+                eprintln!("[error: {}]", error);
+            }
+            AgentEvent::StreamError(e) => {
+                eprintln!("\nStream error: {}", e);
             }
         }
     }
-    Ok(())
 }
