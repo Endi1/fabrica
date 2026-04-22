@@ -67,6 +67,7 @@ pub struct EditOutput {
 }
 
 pub struct ExecutableTool {
+    pub simple_description: String,
     pub declaration: Tool,
     execute_fn: ExecuteFn,
 }
@@ -74,6 +75,7 @@ pub struct ExecutableTool {
 impl ExecutableTool {
     pub fn new<A: JsonSchema + DeserializeOwned + 'static, R: JsonSchema + Serialize + 'static>(
         name: &str,
+        simple_description: &str,
         description: &str,
         execution: fn(A) -> Result<R, Box<dyn Error>>,
     ) -> Self {
@@ -91,6 +93,7 @@ impl ExecutableTool {
 
         Self {
             declaration,
+            simple_description: simple_description.to_string(),
             execute_fn: Box::new(move |args: Value| {
                 let typed_args: A = serde_json::from_value(args)?;
                 let result: R = execution(typed_args)?;

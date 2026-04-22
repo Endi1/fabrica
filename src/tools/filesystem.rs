@@ -17,6 +17,7 @@ pub fn get_filesystem_registry() -> ToolRegistry {
 pub fn read() -> ExecutableTool {
     ExecutableTool::new(
         "read",
+        "Read file contents",
         "Reads a file from the local filesystem. You can access any file directly by using this tool.
 Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
@@ -46,6 +47,7 @@ Usage:
 pub fn write() -> ExecutableTool {
     ExecutableTool::new(
         "write",
+        "Write file contents",
         "Writes a file to the local filesystem.
 
 Usage:
@@ -75,6 +77,7 @@ Usage:
 pub fn edit() -> ExecutableTool {
     ExecutableTool::new(
         "edit",
+        "Edit an existing file's contents",
         "Edits an existing file by replacing a region of text, identified by line/column coordinates, with new content.
 
 Usage:
