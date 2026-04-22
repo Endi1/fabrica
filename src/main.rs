@@ -49,6 +49,10 @@ async fn conversation_loop(agent: &mut Agent) -> Result<(), Box<dyn Error + Send
         let user_message_content = get_input()?;
         let trimmed = user_message_content.trim();
 
+        if trimmed.is_empty() {
+            continue;
+        }
+
         if trimmed == "/exit" {
             break;
         }

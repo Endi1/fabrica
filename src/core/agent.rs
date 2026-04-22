@@ -139,7 +139,7 @@ impl Agent {
                     continue;
                 }
                 None => {
-                    if !full_response.is_empty() {
+                    if !full_response.trim().is_empty() {
                         self.conversation
                             .add_message(Message::model(full_response.clone()));
                     }
