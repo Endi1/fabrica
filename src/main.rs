@@ -37,7 +37,7 @@ fn get_input() -> Result<String, Box<dyn Error + Send + Sync>> {
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let registry = get_filesystem_registry();
-    let sp = get_system_prompt();
+    let sp = get_system_prompt(&registry);
     let mut agent = Agent::new(sp, registry)?;
     conversation_loop(&mut agent).await?;
 

@@ -24,6 +24,7 @@ pub struct BashOutput {
 pub fn bash() -> ExecutableTool {
     ExecutableTool::new(
         "bash",
+        "Execute bash commands",
         "Execute a bash command and return its stdout, stderr, and exit code. \
          Use this to run shell commands like grep, find, cat, git, cargo, etc. \
          Commands are executed in the current working directory.",
