@@ -26,7 +26,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::core::agent::{Agent, AgentEvent};
 use crate::core::model_picker::BoxedModel;
-use crate::core::{build_choice, default_choice_index, default_model_label, model_choices};
+use crate::core::{build_choice, default_choice_index, model_choices};
 
 /// A single entry rendered in the conversation log.
 enum LogEntry {
@@ -86,7 +86,7 @@ struct App {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(initial_model_label: &str) -> Self {
         let mut app = Self {
             log: Vec::new(),
             input: String::new(),
@@ -101,8 +101,8 @@ impl App {
             pending_model_switch: None,
         };
         app.log.push(LogEntry::Info(format!(
-            "Using default model: {}",
-            default_model_label()
+            "Using model: {}",
+            initial_model_label
         )));
         app.log.push(LogEntry::Info(
             "Type /model to switch providers/models. /exit or Ctrl+C to quit.".into(),
@@ -125,7 +125,14 @@ impl App {
     }
 }
 
-pub async fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
+/// Run the terminal UI against an already-constructed `Agent`.
+///
+/// All agent/tool/model setup is performed by the caller so the TUI module
+/// doesn't know (or care) how the agent was built.
+pub async fn run(
+    agent: Agent,
+    initial_model_label: String,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     // Initialize terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -133,7 +140,7 @@ pub async fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_inner(&mut terminal).await;
+    let result = run_inner(&mut terminal, agent, &initial_model_label).await;
 
     // Restore terminal
     disable_raw_mode()?;
@@ -149,18 +156,15 @@ pub async fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn run_inner<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
+    agent: Agent,
+    initial_model_label: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>>
 where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
-    use crate::core::system_prompt::get_system_prompt;
-    use crate::tools::get_filesystem_registry;
+    let agent = Arc::new(Mutex::new(agent));
 
-    let registry = get_filesystem_registry();
-    let sp = get_system_prompt(&registry);
-    let agent = Arc::new(Mutex::new(Agent::new(sp, registry)?));
-
-    let mut app = App::new();
+    let mut app = App::new(initial_model_label);
 
     let mut key_events = EventStream::new();
 

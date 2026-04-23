@@ -7,10 +7,7 @@ use langrust::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{
-    core::{default_model, model_picker::BoxedModel},
-    tools::ToolRegistry,
-};
+use crate::{core::model_picker::BoxedModel, tools::ToolRegistry};
 
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
@@ -51,16 +48,13 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(
-        system_prompt: String,
-        registry: ToolRegistry,
-    ) -> Result<Agent, Box<dyn Error + Send + Sync>> {
-        Ok(Agent {
+    pub fn new(system_prompt: String, registry: ToolRegistry, model: BoxedModel) -> Agent {
+        Agent {
             conversation: Conversation::new(),
             system_prompt,
             registry,
-            model: default_model()?,
-        })
+            model,
+        }
     }
 
     pub async fn send_user_message(
