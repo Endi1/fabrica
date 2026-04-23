@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode, KeyEvent,
-    KeyEventKind, KeyModifiers,
+    KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -17,7 +17,10 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{
+    Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
+    ScrollbarState, Wrap,
+};
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -63,9 +66,17 @@ impl ModelPickerState {
 struct App {
     log: Vec<LogEntry>,
     input: String,
+    /// Current scroll offset, measured in *wrapped* visual lines from the top
+    /// of the log.
     scroll: u16,
-    /// Whether to stick to the bottom of the log as new entries arrive.
-    auto_scroll: bool,
+    /// When true, the view snaps to the bottom as new content arrives. This is
+    /// flipped off when the user scrolls up and re-enabled once they scroll
+    /// back to the bottom (or press End).
+    stick_to_bottom: bool,
+    /// Cached metrics from the previous render so scroll-clamping and Page
+    /// keys can operate without re-measuring.
+    last_total_lines: u16,
+    last_viewport_height: u16,
     mode: Mode,
     picker: ModelPickerState,
     /// True while the agent is processing a user message.
@@ -80,7 +91,9 @@ impl App {
             log: Vec::new(),
             input: String::new(),
             scroll: 0,
-            auto_scroll: true,
+            stick_to_bottom: true,
+            last_total_lines: 0,
+            last_viewport_height: 0,
             mode: Mode::Normal,
             picker: ModelPickerState::new(),
             busy: false,
@@ -195,23 +208,46 @@ async fn handle_term_event(
     agent_rx: &mut UnboundedReceiver<AgentEvent>,
     done_tx: &UnboundedSender<Result<(), String>>,
 ) {
-    let CtEvent::Key(key) = ev else {
-        return;
-    };
-    if key.kind != KeyEventKind::Press {
-        return;
+    match ev {
+        CtEvent::Key(key) => {
+            if key.kind != KeyEventKind::Press {
+                return;
+            }
+            // Global: Ctrl+C quits.
+            if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+                app.should_quit = true;
+                return;
+            }
+            match app.mode {
+                Mode::ModelPicker => handle_picker_key(key, app),
+                Mode::Normal => {
+                    handle_normal_key(key, app, agent, agent_tx, agent_rx, done_tx).await
+                }
+            }
+        }
+        CtEvent::Mouse(m) => handle_mouse(m, app),
+        _ => {}
     }
+}
 
-    // Global: Ctrl+C quits.
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-        app.should_quit = true;
-        return;
+fn handle_mouse(m: MouseEvent, app: &mut App) {
+    match m.kind {
+        MouseEventKind::ScrollUp => scroll_by(app, -3),
+        MouseEventKind::ScrollDown => scroll_by(app, 3),
+        _ => {}
     }
+}
 
-    match app.mode {
-        Mode::ModelPicker => handle_picker_key(key, app),
-        Mode::Normal => handle_normal_key(key, app, agent, agent_tx, agent_rx, done_tx).await,
-    }
+/// Adjust the scroll offset by `delta` wrapped lines, updating the
+/// stick-to-bottom flag based on whether the user ends up at the bottom.
+fn scroll_by(app: &mut App, delta: i32) {
+    let max_scroll = app
+        .last_total_lines
+        .saturating_sub(app.last_viewport_height);
+    let current = app.scroll as i32;
+    let new = (current + delta).clamp(0, max_scroll as i32) as u16;
+    app.scroll = new;
+    app.stick_to_bottom = new >= max_scroll;
 }
 
 fn handle_picker_key(key: KeyEvent, app: &mut App) {
@@ -286,22 +322,16 @@ async fn handle_normal_key(
                 app.input.pop();
             }
         }
-        KeyCode::PageUp => {
-            app.scroll = app.scroll.saturating_sub(5);
-            app.auto_scroll = false;
-        }
-        KeyCode::PageDown => {
-            app.scroll = app.scroll.saturating_add(5);
-        }
-        KeyCode::Up => {
-            app.scroll = app.scroll.saturating_sub(1);
-            app.auto_scroll = false;
-        }
-        KeyCode::Down => {
-            app.scroll = app.scroll.saturating_add(1);
+        KeyCode::Up => scroll_by(app, -1),
+        KeyCode::Down => scroll_by(app, 1),
+        KeyCode::PageUp => scroll_by(app, -(app.last_viewport_height.max(1) as i32)),
+        KeyCode::PageDown => scroll_by(app, app.last_viewport_height.max(1) as i32),
+        KeyCode::Home => {
+            app.scroll = 0;
+            app.stick_to_bottom = false;
         }
         KeyCode::End => {
-            app.auto_scroll = true;
+            app.stick_to_bottom = true;
         }
         KeyCode::Enter => {
             if app.busy {
@@ -324,7 +354,7 @@ async fn handle_normal_key(
             }
 
             app.push_log(LogEntry::User(input.clone()));
-            app.auto_scroll = true;
+            app.stick_to_bottom = true;
 
             // Fresh channel for this turn.
             let (tx, rx) = mpsc::unbounded_channel::<AgentEvent>();
@@ -404,31 +434,62 @@ fn ui(f: &mut ratatui::Frame, app: &mut App) {
 fn render_log(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
     let lines = log_lines(&app.log);
 
-    // Auto-scroll to bottom: estimate total line count with wrap disabled as
-    // a heuristic. Ratatui's Paragraph handles scroll offset in terms of
-    // wrapped lines, but we lack an exact count without measuring. Using the
-    // raw line count works well enough here because most of our entries are
-    // short; wrapping adds at most a few extra lines.
-    let total = lines.len() as u16;
-    let inner_height = area.height.saturating_sub(2); // account for borders
-    let max_scroll = total.saturating_sub(inner_height);
-
-    if app.auto_scroll || app.scroll > max_scroll {
-        app.scroll = max_scroll;
-    }
-
     let title = if app.busy {
         " fabrica — thinking... "
     } else {
         " fabrica "
     };
+    let mut title = title.to_string();
+    if !app.stick_to_bottom {
+        title.push_str("[scrolled — End to jump to bottom] ");
+    }
 
-    let paragraph = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(title))
-        .wrap(Wrap { trim: false })
-        .scroll((app.scroll, 0));
+    let block = Block::default().borders(Borders::ALL).title(title);
+    let inner = block.inner(area);
+    let viewport_height = inner.height;
 
-    f.render_widget(paragraph, area);
+    // Measure with full inner width. If content overflows we reserve one
+    // column for the scrollbar and remeasure, since that re-wraps text.
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let mut total = paragraph.line_count(inner.width) as u16;
+    let needs_scrollbar = total > viewport_height;
+
+    let text_area = if needs_scrollbar && inner.width > 1 {
+        let ta = Rect {
+            x: inner.x,
+            y: inner.y,
+            width: inner.width - 1,
+            height: inner.height,
+        };
+        total = paragraph.line_count(ta.width) as u16;
+        ta
+    } else {
+        inner
+    };
+
+    let max_scroll = total.saturating_sub(viewport_height);
+    if app.stick_to_bottom || app.scroll > max_scroll {
+        app.scroll = max_scroll;
+    }
+    app.last_total_lines = total;
+    app.last_viewport_height = viewport_height;
+
+    f.render_widget(block, area);
+    f.render_widget(paragraph.scroll((app.scroll, 0)), text_area);
+
+    if needs_scrollbar {
+        let scrollbar_area = Rect {
+            x: inner.x + inner.width - 1,
+            y: inner.y,
+            width: 1,
+            height: inner.height,
+        };
+        let mut sb_state = ScrollbarState::new(max_scroll as usize).position(app.scroll as usize);
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None);
+        f.render_stateful_widget(scrollbar, scrollbar_area, &mut sb_state);
+    }
 }
 
 fn log_lines(log: &[LogEntry]) -> Vec<Line<'static>> {
