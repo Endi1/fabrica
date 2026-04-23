@@ -1,5 +1,8 @@
 use langrust::client::Model;
-use langrust::{ClaudeApiModel, ClaudeModel, GeminiApiModel, GeminiModel, GeminiVertexModel};
+use langrust::{
+    ClaudeApiModel, ClaudeModel, GeminiApiModel, GeminiModel, GeminiVertexModel, OpenAiApiModel,
+    OpenAiModel,
+};
 use std::env;
 use std::error::Error;
 use std::io::{self, Write};
@@ -11,6 +14,7 @@ enum Provider {
     Gemini(GeminiModel),
     GeminiVertex(GeminiModel),
     Claude(ClaudeModel),
+    OpenAi(OpenAiModel),
 }
 
 struct ModelChoice {
@@ -18,7 +22,7 @@ struct ModelChoice {
     provider: Provider,
 }
 
-const DEFAULT_CHOICE_INDEX: usize = 4; // Anthropic Claude — claude-opus-4-7
+const DEFAULT_CHOICE_INDEX: usize = 10; // Anthropic Claude — claude-opus-4-7
 
 const CHOICES: &[ModelChoice] = &[
     ModelChoice {
@@ -26,8 +30,32 @@ const CHOICES: &[ModelChoice] = &[
         provider: Provider::Gemini(GeminiModel::Gemini25Flash),
     },
     ModelChoice {
+        label: "Google Gemini API  — gemini-3.1-pro",
+        provider: Provider::Gemini(GeminiModel::Gemini31Pro),
+    },
+    ModelChoice {
+        label: "Google Gemini API  — gemini-3-flash",
+        provider: Provider::Gemini(GeminiModel::Gemini3Flash),
+    },
+    ModelChoice {
+        label: "Google Gemini API  — gemini-3.1-flash-lite",
+        provider: Provider::Gemini(GeminiModel::Gemini31FlashLite),
+    },
+    ModelChoice {
         label: "Google Vertex AI   — gemini-2.5-flash",
         provider: Provider::GeminiVertex(GeminiModel::Gemini25Flash),
+    },
+    ModelChoice {
+        label: "Google Vertex AI  — gemini-3.1-pro",
+        provider: Provider::Gemini(GeminiModel::Gemini31Pro),
+    },
+    ModelChoice {
+        label: "Google Vertex AI  — gemini-3-flash",
+        provider: Provider::Gemini(GeminiModel::Gemini3Flash),
+    },
+    ModelChoice {
+        label: "Google Vertex AI  — gemini-3.1-flash-lite",
+        provider: Provider::Gemini(GeminiModel::Gemini31FlashLite),
     },
     ModelChoice {
         label: "Anthropic Claude   — claude-sonnet-4-5",
@@ -40,6 +68,18 @@ const CHOICES: &[ModelChoice] = &[
     ModelChoice {
         label: "Anthropic Claude   — claude-opus-4-7",
         provider: Provider::Claude(ClaudeModel::Opus4_7),
+    },
+    ModelChoice {
+        label: "Openai   — gpt-5.4",
+        provider: Provider::OpenAi(OpenAiModel::Gpt5_4),
+    },
+    ModelChoice {
+        label: "Openai   — gpt-5.4-mini",
+        provider: Provider::OpenAi(OpenAiModel::Gpt5_4Mini),
+    },
+    ModelChoice {
+        label: "Openai   — gpt-5.4-nano",
+        provider: Provider::OpenAi(OpenAiModel::Gpt5_4Nano),
     },
 ];
 
@@ -57,13 +97,17 @@ fn build(provider: &Provider) -> BuildResult {
         }),
         Provider::GeminiVertex(model) => Box::new(GeminiVertexModel {
             client,
-            region: env_required("GCP_REGION")?,
             project_name: env_required("GCP_PROJECT")?,
             model: model.clone(),
         }),
         Provider::Claude(model) => Box::new(ClaudeApiModel {
             client,
-            api_key: env_required("ANTHROPIC_API_KEY")?,
+            api_key: env_required("ANTHROPIC_KEY")?,
+            model: model.clone(),
+        }),
+        Provider::OpenAi(model) => Box::new(OpenAiApiModel {
+            client,
+            api_key: env_required("OPENAI_KEY")?,
             model: model.clone(),
         }),
     })

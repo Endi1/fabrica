@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 eventsource-stream = "0.2.3"
 futures = "0.3.31"
-langrust = {path = "../llm-rs"}
+langrust = "0.1.0"
 reqwest = "0.12.28"
 schemars = "1.2.0"
 serde = "1.0.228"
