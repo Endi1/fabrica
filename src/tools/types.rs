@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-type ExecuteFn = Box<dyn Fn(Value) -> Result<Value, Box<dyn Error>>>;
+type ExecuteFn = Box<dyn Fn(Value) -> Result<Value, Box<dyn Error + Send + Sync>> + Send + Sync>;
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct CurrentPathResult {
@@ -77,7 +77,7 @@ impl ExecutableTool {
         name: &str,
         simple_description: &str,
         description: &str,
-        execution: fn(A) -> Result<R, Box<dyn Error>>,
+        execution: fn(A) -> Result<R, Box<dyn Error + Send + Sync>>,
     ) -> Self {
         let mut declaration = Tool {
             name: name.to_string(),
@@ -103,7 +103,7 @@ impl ExecutableTool {
         }
     }
 
-    pub fn execute(&self, args: Value) -> Result<Value, Box<dyn Error>> {
+    pub fn execute(&self, args: Value) -> Result<Value, Box<dyn Error + Send + Sync>> {
         (self.execute_fn)(args)
     }
 }

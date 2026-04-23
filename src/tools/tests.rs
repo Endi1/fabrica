@@ -7,7 +7,7 @@ use tempfile::TempDir;
 fn run_tool<A: serde::Serialize, R: serde::de::DeserializeOwned>(
     tool: &ExecutableTool,
     args: A,
-) -> Result<R, Box<dyn std::error::Error>> {
+) -> Result<R, Box<dyn std::error::Error + Send + Sync>> {
     let args_value = serde_json::to_value(args)?;
     let result_value = tool.execute(args_value)?;
     let result: R = serde_json::from_value(result_value)?;

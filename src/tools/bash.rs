@@ -28,7 +28,7 @@ pub fn bash() -> ExecutableTool {
         "Execute a bash command and return its stdout, stderr, and exit code. \
          Use this to run shell commands like grep, find, cat, git, cargo, etc. \
          Commands are executed in the current working directory.",
-        |arg: BashInput| -> Result<BashOutput, Box<dyn Error>> {
+        |arg: BashInput| -> Result<BashOutput, Box<dyn Error + Send + Sync>> {
             let _timeout_secs = arg.timeout.unwrap_or(30);
 
             let output = Command::new("bash").arg("-c").arg(&arg.command).output()?;
