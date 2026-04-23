@@ -5,7 +5,6 @@ use langrust::{
 };
 use std::env;
 use std::error::Error;
-use std::io::{self, Write};
 
 pub type BoxedModel = Box<dyn Model + Send + Sync>;
 type BuildResult = Result<BoxedModel, Box<dyn Error + Send + Sync>>;
@@ -17,9 +16,24 @@ enum Provider {
     OpenAi(OpenAiModel),
 }
 
-struct ModelChoice {
-    label: &'static str,
+pub struct ModelChoice {
+    pub label: &'static str,
     provider: Provider,
+}
+
+pub fn model_choices() -> &'static [ModelChoice] {
+    CHOICES
+}
+
+pub fn default_choice_index() -> usize {
+    DEFAULT_CHOICE_INDEX
+}
+
+pub fn build_choice(index: usize) -> BuildResult {
+    let choice = CHOICES
+        .get(index)
+        .ok_or_else(|| format!("invalid model index {}", index))?;
+    build(&choice.provider)
 }
 
 const DEFAULT_CHOICE_INDEX: usize = 10; // Anthropic Claude — claude-opus-4-7
@@ -115,47 +129,12 @@ fn build(provider: &Provider) -> BuildResult {
 
 pub fn default_model() -> BuildResult {
     let choice = &CHOICES[DEFAULT_CHOICE_INDEX];
-    println!("Using default model: {}", choice.label);
-    println!("(Type /model at the prompt to switch providers/models.)\n");
     build(&choice.provider)
 }
 
-pub fn pick_model() -> BuildResult {
-    println!("Select a provider/model:");
-    for (i, c) in CHOICES.iter().enumerate() {
-        let marker = if i == DEFAULT_CHOICE_INDEX {
-            " (default)"
-        } else {
-            ""
-        };
-        println!("  {}. {}{}", i + 1, c.label, marker);
-    }
-
-    loop {
-        print!("\nEnter choice [1-{}] (blank for default): ", CHOICES.len());
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let trimmed = input.trim();
-
-        let index = if trimmed.is_empty() {
-            Some(DEFAULT_CHOICE_INDEX)
-        } else {
-            trimmed
-                .parse::<usize>()
-                .ok()
-                .filter(|n| (1..=CHOICES.len()).contains(n))
-                .map(|n| n - 1)
-        };
-
-        match index {
-            Some(i) => {
-                let choice = &CHOICES[i];
-                println!("Using: {}\n", choice.label);
-                return build(&choice.provider);
-            }
-            None => println!("Invalid selection, please try again."),
-        }
-    }
+pub fn default_model_label() -> &'static str {
+    CHOICES[DEFAULT_CHOICE_INDEX].label
 }
+
+// The CLI-style picker was replaced by the ratatui-based picker in tui::app.
+// model_choices() / build_choice() / default_choice_index() expose the data.
