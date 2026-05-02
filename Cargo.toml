@@ -1,6 +1,6 @@
 [package]
 name = "fabrica-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Endi Sukaj"]
 description = "A terminal-based coding agent built in Rust"
@@ -16,7 +16,7 @@ path = "src/main.rs"
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 eventsource-stream = "0.2.3"
 futures = "0.3.31"
-langrust = "0.1.0"
+langrust = "0.1.2"
 ratatui = { version = "0.30.0", features = ["unstable-rendered-line-info"] }
 reqwest = "0.12.28"
 schemars = "1.2.0"

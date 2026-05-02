@@ -95,6 +95,14 @@ const CHOICES: &[ModelChoice] = &[
         label: "Openai   — gpt-5.4-nano",
         provider: Provider::OpenAi(OpenAiModel::Gpt5_4Nano),
     },
+    ModelChoice {
+        label: "Openai   — gpt-5.5",
+        provider: Provider::OpenAi(OpenAiModel::Gpt5_5),
+    },
+    ModelChoice {
+        label: "Openai   — gpt-5.3-codex",
+        provider: Provider::OpenAi(OpenAiModel::Gpt5_3Codex),
+    },
 ];
 
 fn env_required(name: &str) -> Result<String, Box<dyn Error + Send + Sync>> {

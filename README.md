@@ -56,9 +56,11 @@ Set the API key for the provider you want to use as an environment variable:
 - `claude-opus-4-7` *(default)*
 
 ### OpenAI
+- `gpt-5.3-codex`
 - `gpt-5.4`
 - `gpt-5.4-mini`
 - `gpt-5.4-nano`
+- `gpt-5.5`
 
 ## Usage
 
