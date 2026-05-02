@@ -1,7 +1,16 @@
 [package]
-name = "fabrica"
+name = "fabrica-cli"
 version = "0.1.0"
 edition = "2024"
+authors = ["Endi Sukaj"]
+description = "A terminal-based coding agent built in Rust"
+license = "MIT"
+repository = "https://github.com/Endi1/fabrica"
+readme = "README.md"
+
+[[bin]]
+name = "fabrica"
+path = "src/main.rs"
 
 [dependencies]
 crossterm = { version = "0.29.0", features = ["event-stream"] }
