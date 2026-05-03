@@ -305,6 +305,8 @@ async fn handle_session_prompt(
     // Stream events as session/update notifications
     let raw_sid = req.params.get("sessionId").cloned().unwrap_or(Value::Null);
 
+    let mut last_tool_call_id: Option<String> = None;
+
     while let Some(event) = event_rx.recv().await {
         match event {
             AgentEvent::TextDelta(text) => {
@@ -326,6 +328,7 @@ async fn handle_session_prompt(
             }
             AgentEvent::ToolCall { name, args } => {
                 let tool_call_id = uuid::Uuid::new_v4().to_string();
+                last_tool_call_id = Some(tool_call_id.clone());
                 let notif = JsonRpcNotification {
                     jsonrpc: "2.0",
                     method: "session/update",
@@ -342,25 +345,41 @@ async fn handle_session_prompt(
                 };
                 write_msg(stdout, &notif).await?;
             }
-            AgentEvent::ToolResult { result: _ } => {
-                // Optionally surface as a tool_call_update; for now, silent.
+            AgentEvent::ToolResult { result } => {
+                if let Some(ref tcid) = last_tool_call_id {
+                    let notif = JsonRpcNotification {
+                        jsonrpc: "2.0",
+                        method: "session/update",
+                        params: serde_json::json!({
+                            "sessionId": raw_sid,
+                            "update": {
+                                "sessionUpdate": "tool_call_update",
+                                "toolCallId": tcid,
+                                "status": "completed",
+                                "rawOutput": result
+                            }
+                        }),
+                    };
+                    write_msg(stdout, &notif).await?;
+                }
             }
             AgentEvent::ToolError { error } => {
-                let notif = JsonRpcNotification {
-                    jsonrpc: "2.0",
-                    method: "session/update",
-                    params: serde_json::json!({
-                        "sessionId": raw_sid,
-                        "update": {
-                            "sessionUpdate": "agent_thought_chunk",
-                            "content": {
-                                "type": "text",
-                                "text": format!("Tool error: {error}")
+                if let Some(ref tcid) = last_tool_call_id {
+                    let notif = JsonRpcNotification {
+                        jsonrpc: "2.0",
+                        method: "session/update",
+                        params: serde_json::json!({
+                            "sessionId": raw_sid,
+                            "update": {
+                                "sessionUpdate": "tool_call_update",
+                                "toolCallId": tcid,
+                                "status": "failed",
+                                "rawOutput": error
                             }
-                        }
-                    }),
-                };
-                write_msg(stdout, &notif).await?;
+                        }),
+                    };
+                    write_msg(stdout, &notif).await?;
+                }
             }
             AgentEvent::StreamError(err) => {
                 let notif = JsonRpcNotification {
