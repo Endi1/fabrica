@@ -106,6 +106,83 @@ fn test_session_new_without_api_key() {
 }
 
 #[test]
+fn test_session_new_success_response_shape() {
+    // This test requires a valid API key for the default model (Anthropic).
+    if std::env::var("ANTHROPIC_KEY").is_err() {
+        eprintln!("Skipping test_session_new_success_response_shape: ANTHROPIC_KEY not set");
+        return;
+    }
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fabrica"))
+        .arg("serve")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to start fabrica serve");
+
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let mut lines = std::io::BufRead::lines(std::io::BufReader::new(stdout)).map(|l| l.unwrap());
+
+    // initialize
+    let _ = roundtrip(
+        &mut stdin,
+        &mut lines,
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1"}}"#,
+    );
+
+    // session/new
+    let resp = roundtrip(
+        &mut stdin,
+        &mut lines,
+        r#"{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/tmp"}}"#,
+    );
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    assert_eq!(v["jsonrpc"], "2.0");
+    assert_eq!(v["id"], 2);
+    assert!(v["error"].is_null(), "unexpected error: {v}");
+
+    let result = &v["result"];
+
+    // sessionId must be present and non-empty (camelCase)
+    assert!(
+        result["sessionId"].is_string(),
+        "expected sessionId string, got: {result}"
+    );
+    assert!(
+        !result["sessionId"].as_str().unwrap().is_empty(),
+        "sessionId must not be empty"
+    );
+    // snake_case key must NOT appear
+    assert!(result.get("session_id").is_none());
+
+    // models must be present with currentModelId (camelCase)
+    assert!(
+        result["models"].is_object(),
+        "expected models object, got: {result}"
+    );
+    assert!(
+        result["models"]["currentModelId"].is_string(),
+        "expected currentModelId string, got: {}",
+        result["models"]
+    );
+    assert!(
+        !result["models"]["currentModelId"]
+            .as_str()
+            .unwrap()
+            .is_empty(),
+        "currentModelId must not be empty"
+    );
+    // snake_case key must NOT appear
+    assert!(result["models"].get("current_model_id").is_none());
+
+    drop(stdin);
+    let status = child.wait().unwrap();
+    assert!(status.success());
+}
+
+#[test]
 fn test_prompt_unknown_session() {
     // Prompting with a bogus session ID should return an error response.
     // We need a valid model to create sessions, but we can test the

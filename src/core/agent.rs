@@ -148,4 +148,8 @@ impl Agent {
     pub fn set_model(&mut self, model: BoxedModel) {
         self.model = model
     }
+
+    pub fn get_model(&self) -> &BoxedModel {
+        &self.model
+    }
 }

@@ -30,6 +30,20 @@ struct JsonRpcRequest {
     params: Value,
 }
 
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct SessionSetupModels {
+    current_model_id: String,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct SessionSetupResult {
+    session_id: String,
+    models: SessionSetupModels,
+    // config_options: Vec<ConfigOption>,
+}
+
 #[derive(Serialize)]
 struct JsonRpcResponse {
     jsonrpc: &'static str,
@@ -216,12 +230,19 @@ async fn handle_session_new(
     let registry = crate::tools::get_filesystem_registry();
     let agent = Agent::new(system_prompt.to_string(), registry, model);
 
+    let session_setup_result = SessionSetupResult {
+        session_id: session_id.clone(),
+        models: SessionSetupModels {
+            current_model_id: agent.get_model().model_name(),
+        },
+    };
+
     sessions
         .lock()
         .await
         .insert(session_id.clone(), SessionState { agent });
 
-    JsonRpcResponse::success(id, serde_json::json!({ "sessionId": session_id }))
+    JsonRpcResponse::success(id, serde_json::json!(session_setup_result))
 }
 
 async fn handle_session_prompt(
@@ -370,4 +391,64 @@ async fn handle_session_prompt(
     write_msg(stdout, &resp).await?;
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_setup_result_serializes_camel_case() {
+        let result = SessionSetupResult {
+            session_id: "abc-123".to_string(),
+            models: SessionSetupModels {
+                current_model_id: "claude-opus-4-7".to_string(),
+            },
+        };
+
+        let v = serde_json::json!(result);
+
+        // Top-level keys must be camelCase
+        assert_eq!(v["sessionId"], "abc-123");
+        assert!(v["models"].is_object());
+        assert_eq!(v["models"]["currentModelId"], "claude-opus-4-7");
+        // snake_case keys must NOT appear
+        assert!(v.get("session_id").is_none());
+        assert!(v.get("models").unwrap().get("current_model_id").is_none());
+    }
+
+    #[test]
+    fn session_setup_models_serializes_camel_case() {
+        let models = SessionSetupModels {
+            current_model_id: "gemini-2.5-flash".to_string(),
+        };
+
+        let v = serde_json::json!(models);
+
+        assert_eq!(v["currentModelId"], "gemini-2.5-flash");
+        assert!(v.get("current_model_id").is_none());
+    }
+
+    #[test]
+    fn session_setup_result_in_json_rpc_response() {
+        let setup = SessionSetupResult {
+            session_id: "sess-42".to_string(),
+            models: SessionSetupModels {
+                current_model_id: "claude-opus-4-7".to_string(),
+            },
+        };
+
+        let resp = JsonRpcResponse::success(serde_json::json!(1), serde_json::json!(setup));
+
+        let v: Value = serde_json::to_value(&resp).unwrap();
+        assert_eq!(v["jsonrpc"], "2.0");
+        assert_eq!(v["id"], 1);
+        assert_eq!(v["result"]["sessionId"], "sess-42");
+        assert_eq!(v["result"]["models"]["currentModelId"], "claude-opus-4-7");
+        assert!(v.get("error").is_none());
+    }
 }
