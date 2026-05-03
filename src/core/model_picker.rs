@@ -18,6 +18,7 @@ enum Provider {
 
 pub struct ModelChoice {
     pub label: &'static str,
+    pub id: &'static str,
     provider: Provider,
 }
 
@@ -41,66 +42,82 @@ const DEFAULT_CHOICE_INDEX: usize = 10; // Anthropic Claude — claude-opus-4-7
 const CHOICES: &[ModelChoice] = &[
     ModelChoice {
         label: "Google Gemini API  — gemini-2.5-flash",
+        id: "gemini-2.5-flash",
         provider: Provider::Gemini(GeminiModel::Gemini25Flash),
     },
     ModelChoice {
         label: "Google Gemini API  — gemini-3.1-pro",
+        id: "gemini-3.1-pro",
         provider: Provider::Gemini(GeminiModel::Gemini31Pro),
     },
     ModelChoice {
         label: "Google Gemini API  — gemini-3-flash",
+        id: "gemini-3-flash",
         provider: Provider::Gemini(GeminiModel::Gemini3Flash),
     },
     ModelChoice {
         label: "Google Gemini API  — gemini-3.1-flash-lite",
+        id: "gemini-3.1-flash-lite",
         provider: Provider::Gemini(GeminiModel::Gemini31FlashLite),
     },
     ModelChoice {
         label: "Google Vertex AI   — gemini-2.5-flash",
+        id: "vertex-gemini-2.5-flash",
         provider: Provider::GeminiVertex(GeminiModel::Gemini25Flash),
     },
     ModelChoice {
         label: "Google Vertex AI  — gemini-3.1-pro",
+        id: "vertex-gemini-3.1-pro",
         provider: Provider::Gemini(GeminiModel::Gemini31Pro),
     },
     ModelChoice {
         label: "Google Vertex AI  — gemini-3-flash",
+        id: "vertex-gemini-3-flash",
         provider: Provider::Gemini(GeminiModel::Gemini3Flash),
     },
     ModelChoice {
         label: "Google Vertex AI  — gemini-3.1-flash-lite",
+        id: "vertex-gemini-3.1-flash-lite",
         provider: Provider::Gemini(GeminiModel::Gemini31FlashLite),
     },
     ModelChoice {
         label: "Anthropic Claude   — claude-sonnet-4-5",
+        id: "claude-sonnet-4-5",
         provider: Provider::Claude(ClaudeModel::Sonnet4_5),
     },
     ModelChoice {
         label: "Anthropic Claude   — claude-opus-4-6",
+        id: "claude-opus-4-6",
         provider: Provider::Claude(ClaudeModel::Opus4_6),
     },
     ModelChoice {
         label: "Anthropic Claude   — claude-opus-4-7",
+        id: "claude-opus-4-7",
         provider: Provider::Claude(ClaudeModel::Opus4_7),
     },
     ModelChoice {
         label: "Openai   — gpt-5.4",
+        id: "gpt-5.4",
         provider: Provider::OpenAi(OpenAiModel::Gpt5_4),
     },
     ModelChoice {
         label: "Openai   — gpt-5.4-mini",
+        id: "gpt-5.4-mini",
         provider: Provider::OpenAi(OpenAiModel::Gpt5_4Mini),
     },
     ModelChoice {
         label: "Openai   — gpt-5.4-nano",
+        id: "gpt-5.4-nano",
         provider: Provider::OpenAi(OpenAiModel::Gpt5_4Nano),
     },
     ModelChoice {
         label: "Openai   — gpt-5.5",
+        id: "gpt-5.5",
         provider: Provider::OpenAi(OpenAiModel::Gpt5_5),
     },
     ModelChoice {
         label: "Openai   — gpt-5.3-codex",
+        id: "gpt-5.3-codex",
         provider: Provider::OpenAi(OpenAiModel::Gpt5_3Codex),
     },
 ];
@@ -142,6 +159,15 @@ pub fn default_model() -> BuildResult {
 
 pub fn default_model_label() -> &'static str {
     CHOICES[DEFAULT_CHOICE_INDEX].label
+}
+
+/// Build a model by its string id (e.g. "claude-opus-4-7").
+pub fn build_by_id(model_id: &str) -> BuildResult {
+    let choice = CHOICES
+        .iter()
+        .find(|c| c.id == model_id)
+        .ok_or_else(|| format!("unknown model id: {model_id}"))?;
+    build(&choice.provider)
 }
 
 // The CLI-style picker was replaced by the ratatui-based picker in tui::app.
