@@ -70,7 +70,14 @@ Run `fabrica` in any project directory:
 fabrica
 ```
 
-Enjoy!
+### ACP Server Mode
+
+fabrica can also run as a headless [Agent Client Protocol](https://agentclientprotocol.com) server, exposing the agent over JSON-RPC 2.0 on stdio. This allows any ACP-compatible client (IDEs, CLI tools, etc.) to drive fabrica programmatically.
+
+```bash
+fabrica serve
+```
+
 
 ### Commands
 
