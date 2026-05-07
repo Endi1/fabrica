@@ -367,16 +367,22 @@ async fn handle_session_prompt(
                         "update": {
                             "sessionUpdate": "tool_call",
                             "toolCallId": tool_call_id,
-                            "title": format!("Tool: {name}"),
+                            "title": &name,
                             "status": "in_progress",
-                            "rawInput": args
+                            "rawInput": args,
                         }
                     }),
                 };
                 write_msg(stdout, &notif).await?;
             }
-            AgentEvent::ToolResult { result } => {
+            AgentEvent::ToolResult {
+                name: _,
+                args: _,
+                result,
+            } => {
                 if let Some(ref tcid) = last_tool_call_id {
+                    let text = serde_json::to_string_pretty(&result)
+                        .unwrap_or_else(|_| result.to_string());
                     let notif = JsonRpcNotification {
                         jsonrpc: "2.0",
                         method: "session/update",
@@ -386,14 +392,25 @@ async fn handle_session_prompt(
                                 "sessionUpdate": "tool_call_update",
                                 "toolCallId": tcid,
                                 "status": "completed",
-                                "rawOutput": result
+                                "content": [{
+                                    "type": "content",
+                                    "content": {
+                                        "type": "text",
+                                        "text": text,
+                                    }
+                                }],
+                                "rawOutput": result,
                             }
                         }),
                     };
                     write_msg(stdout, &notif).await?;
                 }
             }
-            AgentEvent::ToolError { error } => {
+            AgentEvent::ToolError {
+                name: _,
+                args: _,
+                error,
+            } => {
                 if let Some(ref tcid) = last_tool_call_id {
                     let notif = JsonRpcNotification {
                         jsonrpc: "2.0",
@@ -404,7 +421,14 @@ async fn handle_session_prompt(
                                 "sessionUpdate": "tool_call_update",
                                 "toolCallId": tcid,
                                 "status": "failed",
-                                "rawOutput": error
+                                "content": [{
+                                    "type": "content",
+                                    "content": {
+                                        "type": "text",
+                                        "text": error.clone(),
+                                    }
+                                }],
+                                "rawOutput": { "error": error },
                             }
                         }),
                     };

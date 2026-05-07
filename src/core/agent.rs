@@ -18,9 +18,17 @@ pub enum AgentEvent {
         args: serde_json::Value,
     },
     ToolResult {
+        #[allow(dead_code)]
+        name: String,
+        #[allow(dead_code)]
+        args: serde_json::Value,
         result: serde_json::Value,
     },
     ToolError {
+        #[allow(dead_code)]
+        name: String,
+        #[allow(dead_code)]
+        args: serde_json::Value,
         error: String,
     },
     StreamError(String),
@@ -111,9 +119,11 @@ impl Agent {
                     self.conversation
                         .add_message(Message::function_call(fc.clone()));
 
-                    match self.registry.execute(&fc.name, args_value) {
+                    match self.registry.execute(&fc.name, args_value.clone()) {
                         Ok(result) => {
                             let _ = event_channel.send(AgentEvent::ToolResult {
+                                name: fc.name.clone(),
+                                args: args_value.clone(),
                                 result: result.clone(),
                             });
                             self.conversation
@@ -122,6 +132,8 @@ impl Agent {
                         Err(e) => {
                             let error_msg = format!("Tool execution error: {}", e);
                             let _ = event_channel.send(AgentEvent::ToolError {
+                                name: fc.name.clone(),
+                                args: args_value.clone(),
                                 error: error_msg.clone(),
                             });
                             self.conversation.add_message(Message::function_result(
