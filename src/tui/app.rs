@@ -400,7 +400,7 @@ fn apply_agent_event(app: &mut App, ev: AgentEvent) {
                 args: args_str,
             });
         }
-        AgentEvent::ToolResult { result } => {
+        AgentEvent::ToolResult { result, .. } => {
             let result_str =
                 serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string());
             let truncated = if result_str.len() > 200 {
@@ -410,7 +410,7 @@ fn apply_agent_event(app: &mut App, ev: AgentEvent) {
             };
             app.push_log(LogEntry::ToolResult(truncated));
         }
-        AgentEvent::ToolError { error } => {
+        AgentEvent::ToolError { error, .. } => {
             app.push_log(LogEntry::ToolError(error));
         }
         AgentEvent::StreamError(e) => {
