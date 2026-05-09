@@ -7,7 +7,8 @@ use std::sync::OnceLock;
 /// Lookup order:
 ///   1. `$FABRICA_CONFIG` (if set)
 ///   2. `$XDG_CONFIG_HOME/fabrica/config.toml` (or `~/.config/fabrica/config.toml`)
-///   3. `~/.fabrica.conf`
+///   3. Platform config dir (e.g. `~/Library/Application Support/fabrica/config.toml` on macOS)
+///   4. `~/.fabrica.conf`
 ///
 /// API keys missing from the file fall back to environment variables:
 ///   - `gemini`      <- `GEMINI_API_KEY`, `GEMINI_KEY`
@@ -94,6 +95,22 @@ pub fn config_path() -> Option<PathBuf> {
         }
     }
 
+    // Honor XDG_CONFIG_HOME explicitly, falling back to ~/.config (even on
+    // platforms like macOS where `dirs::config_dir()` returns
+    // ~/Library/Application Support).
+    let xdg_base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config")));
+    if let Some(base) = xdg_base {
+        let xdg_based = base.join("fabrica").join("config.toml");
+        if xdg_based.is_file() {
+            return Some(xdg_based);
+        }
+    }
+
+    // Platform-native config dir as a secondary location (e.g.
+    // ~/Library/Application Support/fabrica/config.toml on macOS).
     if let Some(config_dir) = dirs::config_dir() {
         let dir_based = config_dir.join("fabrica").join("config.toml");
         if dir_based.is_file() {
