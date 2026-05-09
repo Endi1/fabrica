@@ -1,9 +1,9 @@
+use crate::core::config::config;
 use langrust::client::Model;
 use langrust::{
     ClaudeApiModel, ClaudeModel, GeminiApiModel, GeminiModel, GeminiVertexModel, OpenAiApiModel,
     OpenAiModel,
 };
-use std::env;
 use std::error::Error;
 
 pub type BoxedModel = Box<dyn Model + Send + Sync>;
@@ -122,31 +122,45 @@ const CHOICES: &[ModelChoice] = &[
     },
 ];
 
-fn env_required(name: &str) -> Result<String, Box<dyn Error + Send + Sync>> {
-    env::var(name).map_err(|_| format!("{} environment variable not set", name).into())
+/// Resolve a credential, preferring the env var, then the config file value.
+fn resolve_credential(
+    env_var: &str,
+    config_value: Option<&str>,
+) -> Result<String, Box<dyn Error + Send + Sync>> {
+    if let Some(v) = config_value
+        && !v.is_empty()
+    {
+        return Ok(v.to_string());
+    }
+    Err(format!(
+        "{} not set (provide via environment variable or fabrica config file)",
+        env_var
+    )
+    .into())
 }
 
 fn build(provider: &Provider) -> BuildResult {
     let client = reqwest::Client::new();
+    let cfg = config();
     Ok(match provider {
         Provider::Gemini(model) => Box::new(GeminiApiModel {
             client,
-            api_key: env_required("GEMINI_KEY")?,
+            api_key: resolve_credential("GEMINI_KEY", cfg.api_keys.gemini.as_deref())?,
             model: model.clone(),
         }),
         Provider::GeminiVertex(model) => Box::new(GeminiVertexModel {
             client,
-            project_name: env_required("GCP_PROJECT")?,
+            project_name: resolve_credential("GCP_PROJECT", cfg.api_keys.gcp_project.as_deref())?,
             model: model.clone(),
         }),
         Provider::Claude(model) => Box::new(ClaudeApiModel {
             client,
-            api_key: env_required("ANTHROPIC_KEY")?,
+            api_key: resolve_credential("ANTHROPIC_KEY", cfg.api_keys.anthropic.as_deref())?,
             model: model.clone(),
         }),
         Provider::OpenAi(model) => Box::new(OpenAiApiModel {
             client,
-            api_key: env_required("OPENAI_KEY")?,
+            api_key: resolve_credential("OPENAI_KEY", cfg.api_keys.openai.as_deref())?,
             model: model.clone(),
         }),
     })
@@ -169,6 +183,3 @@ pub fn build_by_id(model_id: &str) -> BuildResult {
         .ok_or_else(|| format!("unknown model id: {model_id}"))?;
     build(&choice.provider)
 }
-
-// The CLI-style picker was replaced by the ratatui-based picker in tui::app.
-// model_choices() / build_choice() / default_choice_index() expose the data.

@@ -27,14 +27,30 @@ cargo install --path .
 
 ## Configuration
 
-Set the API key for the provider you want to use as an environment variable:
+Fabrica looks up provider credentials in the following order:
 
-| Provider          | Environment Variable |
-|-------------------|----------------------|
-| Google Gemini API | `GEMINI_KEY`         |
-| Google Vertex AI  | `GCP_PROJECT`        |
-| Anthropic Claude  | `ANTHROPIC_KEY`      |
-| OpenAI            | `OPENAI_KEY`         |
+1. Environment variables (highest priority)
+2. A TOML config file at one of:
+   - `$FABRICA_CONFIG` (if set)
+   - `~/.config/fabrica/config.toml`
+   - `~/.fabrica.conf`
+
+| Provider          | Environment Variable | Config Key (under `[api_keys]`) |
+|-------------------|----------------------|---------------------------------|
+| Google Gemini API | `GEMINI_KEY`         | `gemini`                        |
+| Google Vertex AI  | `GCP_PROJECT`        | `gcp_project`                   |
+| Anthropic Claude  | `ANTHROPIC_KEY`      | `anthropic`                     |
+| OpenAI            | `OPENAI_KEY`         | `openai`                        |
+
+Example `~/.config/fabrica/config.toml`:
+
+```toml
+[api_keys]
+gemini = "..."
+anthropic = "..."
+openai = "..."
+gcp_project = "my-gcp-project"
+```|
 
 ## Supported Models
 
