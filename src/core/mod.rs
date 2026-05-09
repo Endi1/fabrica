@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod config;
 pub mod model_picker;
 pub mod system_prompt;
 
